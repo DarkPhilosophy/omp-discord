@@ -1,26 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import {
-  chmod,
-  mkdtemp,
-  readFile,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  DEFAULT_DISCORD_CONFIG,
-  loadDiscordConfig,
-  saveDiscordConfig,
-} from "../src/config.ts";
+import { DEFAULT_DISCORD_CONFIG, loadDiscordConfig, saveDiscordConfig } from "../src/config.ts";
 
 const roots: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { force: true, recursive: true })),
-  );
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 
 async function temporaryConfigPath(): Promise<string> {
@@ -93,12 +80,8 @@ describe("Discord configuration", () => {
     );
 
     const invalidValues = await loadDiscordConfig({ path, env: {} });
-    expect(invalidValues.config.follow.pollMs).toBe(
-      DEFAULT_DISCORD_CONFIG.follow.pollMs,
-    );
-    expect(invalidValues.config.follow.batchSize).toBe(
-      DEFAULT_DISCORD_CONFIG.follow.batchSize,
-    );
+    expect(invalidValues.config.follow.pollMs).toBe(DEFAULT_DISCORD_CONFIG.follow.pollMs);
+    expect(invalidValues.config.follow.batchSize).toBe(DEFAULT_DISCORD_CONFIG.follow.batchSize);
     expect(invalidValues.config.follow.resumeOnStart).toBe(
       DEFAULT_DISCORD_CONFIG.follow.resumeOnStart,
     );
@@ -112,10 +95,7 @@ describe("Discord configuration", () => {
 
   test("saves settings atomically with private permissions and preserves unknown keys", async () => {
     const path = await temporaryConfigPath();
-    await writeFile(
-      path,
-      "custom:\n  retained: true\nfollow:\n  poll_ms: 900\n",
-    );
+    await writeFile(path, "custom:\n  retained: true\nfollow:\n  poll_ms: 900\n");
     await chmod(path, 0o644);
 
     await saveDiscordConfig(path, {
@@ -123,10 +103,7 @@ describe("Discord configuration", () => {
       attachments: { textMaxBytes: 123456 },
     });
 
-    const saved = Bun.YAML.parse(await readFile(path, "utf8")) as Record<
-      string,
-      unknown
-    >;
+    const saved = Bun.YAML.parse(await readFile(path, "utf8")) as Record<string, unknown>;
     expect(saved).toEqual({
       custom: { retained: true },
       follow: {

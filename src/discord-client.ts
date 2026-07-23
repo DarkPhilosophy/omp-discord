@@ -1,7 +1,4 @@
-export type DiscordFetch = (
-  url: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>;
+export type DiscordFetch = (url: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 export interface CredentialProvider {
   get(): Promise<string | undefined>;
@@ -41,9 +38,7 @@ interface DiscordAttachmentRecord {
 }
 
 function optionalNonNegativeInteger(value: unknown): number | undefined {
-  return Number.isSafeInteger(value) && Number(value) >= 0
-    ? Number(value)
-    : undefined;
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
 }
 
 function attachmentRecord(value: unknown): DiscordAttachmentRecord | undefined {
@@ -76,9 +71,7 @@ function attachmentRecord(value: unknown): DiscordAttachmentRecord | undefined {
   };
 }
 
-export function discordAttachmentMetadata(
-  value: unknown,
-): DiscordAttachmentMetadata | undefined {
+export function discordAttachmentMetadata(value: unknown): DiscordAttachmentMetadata | undefined {
   return attachmentRecord(value)?.metadata;
 }
 
@@ -87,23 +80,17 @@ function isTrustedAttachmentUrl(value: string): boolean {
     const url = new URL(value);
     return (
       url.protocol === "https:" &&
-      (url.hostname === "cdn.discordapp.com" ||
-        url.hostname === "media.discordapp.net")
+      (url.hostname === "cdn.discordapp.com" || url.hostname === "media.discordapp.net")
     );
   } catch {
     return false;
   }
 }
 
-async function readBoundedBody(
-  response: Response,
-  maxBytes: number,
-): Promise<Uint8Array> {
+async function readBoundedBody(response: Response, maxBytes: number): Promise<Uint8Array> {
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw new Error(
-      `Discord attachment response exceeds the ${maxBytes} byte limit`,
-    );
+    throw new Error(`Discord attachment response exceeds the ${maxBytes} byte limit`);
   }
   if (!response.body) return new Uint8Array();
   const reader = response.body.getReader();
@@ -115,9 +102,7 @@ async function readBoundedBody(
     total += value.byteLength;
     if (total > maxBytes) {
       await reader.cancel();
-      throw new Error(
-        `Discord attachment response exceeds the ${maxBytes} byte limit`,
-      );
+      throw new Error(`Discord attachment response exceeds the ${maxBytes} byte limit`);
     }
     chunks.push(value);
   }
@@ -167,8 +152,7 @@ async function httpError(response: Response): Promise<DiscordHttpError> {
   }
   if (retryAfterMs === undefined && response.status === 429) {
     const header = Number(response.headers.get("retry-after"));
-    if (Number.isFinite(header) && header > 0)
-      retryAfterMs = Math.ceil(header * 1000);
+    if (Number.isFinite(header) && header > 0) retryAfterMs = Math.ceil(header * 1000);
   }
   return new DiscordHttpError(response.status, { retryAfterMs, detail });
 }
@@ -200,43 +184,28 @@ export class DiscordClient {
   }
 
   async listGuildChannels(guildId: string): Promise<unknown[]> {
-    return this.#request(
-      `/guilds/${encodeURIComponent(guildId)}/channels`,
-    ) as Promise<unknown[]>;
+    return this.#request(`/guilds/${encodeURIComponent(guildId)}/channels`) as Promise<unknown[]>;
   }
 
   async listDirectChannels(): Promise<unknown[]> {
     return this.#request("/users/@me/channels") as Promise<unknown[]>;
   }
 
-  async listMessages(
-    channelId: string,
-    limit: number,
-    after?: string,
-  ): Promise<unknown[]> {
-    const query = after
-      ? `limit=${limit}&after=${encodeURIComponent(after)}`
-      : `limit=${limit}`;
-    return this.#request(
-      `/channels/${encodeURIComponent(channelId)}/messages?${query}`,
-    ) as Promise<unknown[]>;
+  async listMessages(channelId: string, limit: number, after?: string): Promise<unknown[]> {
+    const query = after ? `limit=${limit}&after=${encodeURIComponent(after)}` : `limit=${limit}`;
+    return this.#request(`/channels/${encodeURIComponent(channelId)}/messages?${query}`) as Promise<
+      unknown[]
+    >;
   }
 
   async sendMessage(channelId: string, content: string): Promise<unknown> {
-    return this.#request(
-      `/channels/${encodeURIComponent(channelId)}/messages`,
-      {
-        method: "POST",
-        body: JSON.stringify({ content }),
-      },
-    );
+    return this.#request(`/channels/${encodeURIComponent(channelId)}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    });
   }
 
-  async editMessage(
-    channelId: string,
-    messageId: string,
-    content: string,
-  ): Promise<unknown> {
+  async editMessage(channelId: string, messageId: string, content: string): Promise<unknown> {
     return this.#request(
       `/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`,
       {
@@ -268,14 +237,8 @@ export class DiscordClient {
       typeof limits === "number"
         ? [limits]
         : [limits.imageMaxBytes, limits.textMaxBytes, limits.fileMaxBytes];
-    if (
-      configuredLimits.some(
-        (limit) => !Number.isSafeInteger(limit) || limit <= 0,
-      )
-    ) {
-      throw new Error(
-        "Discord attachment byte limits must be positive integers",
-      );
+    if (configuredLimits.some((limit) => !Number.isSafeInteger(limit) || limit <= 0)) {
+      throw new Error("Discord attachment byte limits must be positive integers");
     }
     const message = await this.#request(
       `/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`,
@@ -285,12 +248,9 @@ export class DiscordClient {
         ? (message as Record<string, unknown>).attachments
         : undefined;
     const record = Array.isArray(attachments)
-      ? attachments
-          .map(attachmentRecord)
-          .find((item) => item?.metadata.id === attachmentId)
+      ? attachments.map(attachmentRecord).find((item) => item?.metadata.id === attachmentId)
       : undefined;
-    if (!record)
-      throw new Error("Discord attachment not found on the selected message");
+    if (!record) throw new Error("Discord attachment not found on the selected message");
     const maxBytes =
       typeof limits === "number"
         ? limits

@@ -1,15 +1,8 @@
 import { randomBytes } from "node:crypto";
-import {
-  chmod,
-  mkdir,
-  readFile,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { DiscordAttachmentMetadata } from "./discord-client.ts";
-import { targetsMatch, type DiscordTarget } from "./session-ledger.ts";
+import { type DiscordTarget, targetsMatch } from "./session-ledger.ts";
 
 export interface FollowMessage {
   messageId: string;
@@ -73,9 +66,7 @@ function isTarget(value: unknown): value is DiscordTarget {
   if (!value || typeof value !== "object") return false;
   const target = value as Record<string, unknown>;
   return (
-    (target.kind === "guild" ||
-      target.kind === "dm" ||
-      target.kind === "group-dm") &&
+    (target.kind === "guild" || target.kind === "dm" || target.kind === "group-dm") &&
     typeof target.channelId === "string"
   );
 }
@@ -102,16 +93,13 @@ function parseState(value: unknown): PersistedFollowState | undefined {
     !state.pending.every(isMessage) ||
     typeof state.updatedAt !== "string" ||
     (state.cursorId !== undefined && typeof state.cursorId !== "string") ||
-    (state.firstPendingAt !== undefined &&
-      typeof state.firstPendingAt !== "string")
+    (state.firstPendingAt !== undefined && typeof state.firstPendingAt !== "string")
   )
     return undefined;
   return state as unknown as PersistedFollowState;
 }
 
-async function readState(
-  path: string,
-): Promise<PersistedFollowState | undefined> {
+async function readState(path: string): Promise<PersistedFollowState | undefined> {
   try {
     return parseState(JSON.parse(await readFile(path, "utf8")));
   } catch (error) {
@@ -120,10 +108,7 @@ async function readState(
   }
 }
 
-async function writeState(
-  path: string,
-  state: PersistedFollowState,
-): Promise<void> {
+async function writeState(path: string, state: PersistedFollowState): Promise<void> {
   const directory = dirname(path);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const temporaryPath = join(
@@ -163,37 +148,26 @@ export class FollowManager {
   ): Promise<FollowStatus> {
     const owner = runtimeOwners.get(this.#ownerKey);
     if (owner && owner.manager !== this) {
-      throw new Error(
-        `Discord follow is already owned by OMP session ${owner.sessionId}`,
-      );
+      throw new Error(`Discord follow is already owned by OMP session ${owner.sessionId}`);
     }
     if (this.#ownerSessionId && this.#ownerSessionId !== sessionId) {
-      throw new Error(
-        `Discord follow is already owned by OMP session ${this.#ownerSessionId}`,
-      );
+      throw new Error(`Discord follow is already owned by OMP session ${this.#ownerSessionId}`);
     }
 
     runtimeOwners.set(this.#ownerKey, { manager: this, sessionId });
     this.#ownerSessionId = sessionId;
     try {
-      const persisted = options.resume
-        ? await readState(this.#options.statePath)
-        : undefined;
+      const persisted = options.resume ? await readState(this.#options.statePath) : undefined;
       if (persisted?.enabled) {
         if (target && !targetsMatch(target, persisted.target)) {
-          throw new Error(
-            "Discord follow target does not match the persisted target",
-          );
+          throw new Error("Discord follow target does not match the persisted target");
         }
         this.#state = persisted;
       } else {
-        if (!target)
-          throw new Error("Discord follow has no persisted target to resume");
+        if (!target) throw new Error("Discord follow has no persisted target to resume");
         const baseline = await this.#options.listMessages(target.channelId);
         const newest = baseline
-          .toSorted((left, right) =>
-            compareMessageIds(left.messageId, right.messageId),
-          )
+          .toSorted((left, right) => compareMessageIds(left.messageId, right.messageId))
           .at(-1);
         this.#state = {
           version: 1,
@@ -269,21 +243,14 @@ export class FollowManager {
 
   async #tick(): Promise<void> {
     const state = this.#requireActiveState();
-    const listed = await this.#options.listMessages(
-      state.target.channelId,
-      state.cursorId,
-    );
+    const listed = await this.#options.listMessages(state.target.channelId, state.cursorId);
     const known = new Set(state.pending.map((message) => message.messageId));
     const incoming = listed
       .filter(
-        (message) =>
-          !state.cursorId ||
-          compareMessageIds(message.messageId, state.cursorId) > 0,
+        (message) => !state.cursorId || compareMessageIds(message.messageId, state.cursorId) > 0,
       )
       .filter((message) => !known.has(message.messageId))
-      .toSorted((left, right) =>
-        compareMessageIds(left.messageId, right.messageId),
-      );
+      .toSorted((left, right) => compareMessageIds(left.messageId, right.messageId));
 
     if (incoming.length > 0) {
       state.pending.push(...incoming);
@@ -299,14 +266,8 @@ export class FollowManager {
     const state = this.#requireActiveState();
     if (state.pending.length === 0) return;
     const now = this.#options.now?.() ?? Date.now();
-    const age = state.firstPendingAt
-      ? now - Date.parse(state.firstPendingAt)
-      : 0;
-    if (
-      !force &&
-      state.pending.length < this.#options.batchSize &&
-      age < this.#options.flushMs
-    )
+    const age = state.firstPendingAt ? now - Date.parse(state.firstPendingAt) : 0;
+    if (!force && state.pending.length < this.#options.batchSize && age < this.#options.flushMs)
       return;
 
     const batch = state.pending.slice();
@@ -318,8 +279,7 @@ export class FollowManager {
   }
 
   #requireActiveState(): PersistedFollowState {
-    if (!this.#ownerSessionId || !this.#state)
-      throw new Error("Discord follow is not active");
+    if (!this.#ownerSessionId || !this.#state) throw new Error("Discord follow is not active");
     return this.#state;
   }
 

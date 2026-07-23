@@ -3,35 +3,31 @@ import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 import { AsyncJobManager } from "@oh-my-pi/pi-coding-agent/async";
 import { MAIN_AGENT_ID } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
-import { SecretToolCredentialStore } from "./credential-store.ts";
-import {
-  DiscordClient,
-  DiscordHttpError,
-  type DiscordAttachmentMetadata,
-} from "./discord-client.ts";
 import {
   DEFAULT_DISCORD_CONFIG_PATH,
   DISCORD_CONFIG_SETTINGS,
+  type DiscordConfigPatch,
   loadDiscordConfig,
   saveDiscordConfig,
-  type DiscordConfigPatch,
 } from "./config.ts";
+import { SecretToolCredentialStore } from "./credential-store.ts";
 import {
-  FollowManager,
-  type FollowMessage,
-  type FollowStatus,
-} from "./follow-manager.ts";
+  type DiscordAttachmentMetadata,
+  DiscordClient,
+  DiscordHttpError,
+} from "./discord-client.ts";
+import { FollowManager, type FollowMessage, type FollowStatus } from "./follow-manager.ts";
 import {
   appendOperation,
   cacheListedMessages,
-  listCachedMessages,
-  updateCachedMessage,
-  listOperations,
-  targetsMatch,
   type DiscordTarget,
+  listCachedMessages,
+  listOperations,
   type OperationRecord,
   type OperationResult,
   type SentMessage,
+  targetsMatch,
+  updateCachedMessage,
 } from "./session-ledger.ts";
 
 interface ToolRegistrar {
@@ -58,14 +54,8 @@ interface DiscordRuntimeApi {
 }
 
 interface TimerContext {
-  setInterval?(
-    callback: (...args: unknown[]) => void,
-    milliseconds?: number,
-  ): unknown;
-  setTimeout?(
-    callback: (...args: unknown[]) => void,
-    milliseconds?: number,
-  ): unknown;
+  setInterval?(callback: (...args: unknown[]) => void, milliseconds?: number): unknown;
+  setTimeout?(callback: (...args: unknown[]) => void, milliseconds?: number): unknown;
   clearTimer?(timer: unknown): void;
 }
 
@@ -76,10 +66,7 @@ export interface DiscordJobRegistry {
     run: (ctx: {
       jobId: string;
       signal: AbortSignal;
-      reportProgress: (
-        text: string,
-        details?: Record<string, unknown>,
-      ) => Promise<void>;
+      reportProgress: (text: string, details?: Record<string, unknown>) => Promise<void>;
       markRunning: () => void;
     }) => Promise<string>,
     options?: { id?: string; ownerId?: string },
@@ -151,20 +138,13 @@ function unquote(value: string): string {
 
 function accountDetails(user: unknown) {
   const account = asRecord(user);
-  const username =
-    account && typeof account.username === "string"
-      ? account.username
-      : undefined;
+  const username = account && typeof account.username === "string" ? account.username : undefined;
   const globalName =
-    account && typeof account.global_name === "string"
-      ? account.global_name
-      : undefined;
+    account && typeof account.global_name === "string" ? account.global_name : undefined;
   const id = account && typeof account.id === "string" ? account.id : undefined;
   const bot = account && typeof account.bot === "boolean" ? account.bot : false;
   const mfaEnabled =
-    account && typeof account.mfa_enabled === "boolean"
-      ? account.mfa_enabled
-      : undefined;
+    account && typeof account.mfa_enabled === "boolean" ? account.mfa_enabled : undefined;
 
   return {
     accountType: bot ? "bot" : "user",
@@ -190,12 +170,10 @@ function accountStatus(user: unknown): string {
 }
 
 function targetFrom(value: TargetInput): DiscordTarget {
-  if (!value.kind)
-    throw new Error("Discord target requires kind: guild, dm, or group-dm");
+  if (!value.kind) throw new Error("Discord target requires kind: guild, dm, or group-dm");
   if (!value.channelId) throw new Error("Discord target requires channelId");
   if (value.kind === "guild") {
-    if (!value.guildId)
-      throw new Error("Guild Discord target requires guildId");
+    if (!value.guildId) throw new Error("Guild Discord target requires guildId");
     return {
       kind: value.kind,
       guildId: value.guildId,
@@ -203,16 +181,14 @@ function targetFrom(value: TargetInput): DiscordTarget {
     };
   }
   if (value.kind === "dm") {
-    if (!value.recipientId)
-      throw new Error("DM Discord target requires recipientId");
+    if (!value.recipientId) throw new Error("DM Discord target requires recipientId");
     return {
       kind: value.kind,
       channelId: value.channelId,
       recipientId: value.recipientId,
     };
   }
-  if (!value.recipientIds?.length)
-    throw new Error("Group DM Discord target requires recipientIds");
+  if (!value.recipientIds?.length) throw new Error("Group DM Discord target requires recipientIds");
   return {
     kind: value.kind,
     channelId: value.channelId,
@@ -222,8 +198,7 @@ function targetFrom(value: TargetInput): DiscordTarget {
 
 function currentSessionId(ctx: ExtensionContext): string {
   const sessionId = ctx.sessionManager.getSessionId();
-  if (!sessionId)
-    throw new Error("Discord operations require an active OMP session");
+  if (!sessionId) throw new Error("Discord operations require an active OMP session");
   return sessionId;
 }
 
@@ -268,12 +243,8 @@ function safeAttachments(
         filename: attachment.filename,
         contentType: attachment.content_type,
         size: attachment.size,
-        ...(typeof attachment.width === "number"
-          ? { width: attachment.width }
-          : {}),
-        ...(typeof attachment.height === "number"
-          ? { height: attachment.height }
-          : {}),
+        ...(typeof attachment.width === "number" ? { width: attachment.width } : {}),
+        ...(typeof attachment.height === "number" ? { height: attachment.height } : {}),
         ...(options?.includeUrl === true && typeof attachment.url === "string"
           ? { url: attachment.url }
           : {}),
@@ -291,28 +262,20 @@ function safeMessage(
   const author = asRecord(message.author);
   return {
     messageId: message.id,
-    channelId:
-      typeof message.channel_id === "string" ? message.channel_id : undefined,
+    channelId: typeof message.channel_id === "string" ? message.channel_id : undefined,
     content: typeof message.content === "string" ? message.content : "",
-    createdAt:
-      typeof message.timestamp === "string"
-        ? message.timestamp
-        : new Date().toISOString(),
+    createdAt: typeof message.timestamp === "string" ? message.timestamp : new Date().toISOString(),
     updatedAt:
       typeof message.edited_timestamp === "string"
         ? message.edited_timestamp
         : typeof message.timestamp === "string"
           ? message.timestamp
           : new Date().toISOString(),
-    editedAt:
-      typeof message.edited_timestamp === "string"
-        ? message.edited_timestamp
-        : undefined,
+    editedAt: typeof message.edited_timestamp === "string" ? message.edited_timestamp : undefined,
     author: author
       ? {
           id: typeof author.id === "string" ? author.id : undefined,
-          username:
-            typeof author.username === "string" ? author.username : undefined,
+          username: typeof author.username === "string" ? author.username : undefined,
         }
       : undefined,
     attachments: safeAttachments(message.attachments, options),
@@ -320,29 +283,18 @@ function safeMessage(
   };
 }
 
-function safeMessages(
-  value: unknown,
-  options?: { includeUrl?: boolean },
-): ListedDiscordMessage[] {
+function safeMessages(value: unknown, options?: { includeUrl?: boolean }): ListedDiscordMessage[] {
   return Array.isArray(value)
     ? value
         .map((message) => safeMessage(message, options))
-        .filter(
-          (message): message is ListedDiscordMessage => message !== undefined,
-        )
+        .filter((message): message is ListedDiscordMessage => message !== undefined)
     : [];
 }
 
-function searchMessages(
-  messages: ListedDiscordMessage[],
-  query: string,
-): ListedDiscordMessage[] {
+function searchMessages(messages: ListedDiscordMessage[], query: string): ListedDiscordMessage[] {
   const normalizedQuery = query.normalize("NFKC").toLocaleLowerCase();
   return messages.filter((message) =>
-    message.content
-      .normalize("NFKC")
-      .toLocaleLowerCase()
-      .includes(normalizedQuery),
+    message.content.normalize("NFKC").toLocaleLowerCase().includes(normalizedQuery),
   );
 }
 
@@ -395,10 +347,7 @@ function safeGuildChannels(value: unknown): Record<string, unknown>[] {
   });
 }
 
-function safeDirectChannels(
-  value: unknown,
-  kind: "dm" | "group-dm",
-): Record<string, unknown>[] {
+function safeDirectChannels(value: unknown, kind: "dm" | "group-dm"): Record<string, unknown>[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     const channel = asRecord(item);
@@ -412,10 +361,7 @@ function safeDirectChannels(
             ? [
                 {
                   id: user.id,
-                  username:
-                    typeof user.username === "string"
-                      ? user.username
-                      : undefined,
+                  username: typeof user.username === "string" ? user.username : undefined,
                 },
               ]
             : [];
@@ -457,10 +403,7 @@ export function createDiscordExtension(
   interface FollowJobHandle {
     id: string;
     finish: (summary: string) => void;
-    reportProgress?: (
-      text: string,
-      details?: Record<string, unknown>,
-    ) => Promise<void>;
+    reportProgress?: (text: string, details?: Record<string, unknown>) => Promise<void>;
   }
   interface FollowPollState {
     stopped: boolean;
@@ -496,17 +439,16 @@ export function createDiscordExtension(
         const guildName = safeGuilds(await client.listGuilds()).find(
           (guild) => guild.id === target.guildId,
         )?.name;
-        const channelName = safeGuildChannels(
-          await client.listGuildChannels(target.guildId),
-        ).find((channel) => channel.id === target.channelId)?.name;
+        const channelName = safeGuildChannels(await client.listGuildChannels(target.guildId)).find(
+          (channel) => channel.id === target.channelId,
+        )?.name;
         if (typeof guildName === "string" && typeof channelName === "string") {
           resolved = `${guildName} #${channelName}`;
         }
       } else {
-        const channel = safeDirectChannels(
-          await client.listDirectChannels(),
-          target.kind,
-        ).find((candidate) => candidate.id === target.channelId);
+        const channel = safeDirectChannels(await client.listDirectChannels(), target.kind).find(
+          (candidate) => candidate.id === target.channelId,
+        );
         if (channel && target.kind === "dm") {
           const recipient = Array.isArray(channel.recipients)
             ? (channel.recipients[0] as { username?: string } | undefined)
@@ -523,16 +465,11 @@ export function createDiscordExtension(
       followTargetLabel = resolved;
       updateFollowWidget({ enabled: true, target });
     })().catch((error: unknown) =>
-      pi.logger.warn(
-        `Discord follow label resolution failed: ${String(error)}`,
-      ),
+      pi.logger.warn(`Discord follow label resolution failed: ${String(error)}`),
     );
   };
   const FOLLOW_WIDGET_KEY = "omp-discord-follow";
-  const updateFollowWidget = (state: {
-    enabled: boolean;
-    target?: DiscordTarget;
-  }): void => {
+  const updateFollowWidget = (state: { enabled: boolean; target?: DiscordTarget }): void => {
     const ui = (uiContext as Partial<ExtensionContext> | undefined)?.ui;
     if (!ui?.setWidget) return;
     if (!state.enabled) {
@@ -550,10 +487,7 @@ export function createDiscordExtension(
       { placement: "belowEditor" },
     );
   };
-  const registerFollowJob = (
-    sessionId: string,
-    target?: DiscordTarget,
-  ): void => {
+  const registerFollowJob = (sessionId: string, target?: DiscordTarget): void => {
     if (followJob) return;
     const registry =
       dependencies.jobRegistry === null
@@ -561,8 +495,7 @@ export function createDiscordExtension(
         : (dependencies.jobRegistry ?? AsyncJobManager.instance());
     if (!registry) return;
     try {
-      const { promise: done, resolve: finish } =
-        Promise.withResolvers<string>();
+      const { promise: done, resolve: finish } = Promise.withResolvers<string>();
       const job: FollowJobHandle = { id: "", finish };
       job.id = registry.register(
         "task",
@@ -582,9 +515,7 @@ export function createDiscordExtension(
       );
       followJob = job;
     } catch (error) {
-      pi.logger.warn(
-        `Discord follow background job registration failed: ${String(error)}`,
-      );
+      pi.logger.warn(`Discord follow background job registration failed: ${String(error)}`);
     }
   };
   const finishFollowJob = (summary: string): void => {
@@ -604,23 +535,13 @@ export function createDiscordExtension(
           batchSize: config.follow.batchSize,
           flushMs: config.follow.flushMs,
           historyLimit: config.follow.historyLimit,
-          listMessages: async (
-            channelId: string,
-            after?: string,
-          ): Promise<FollowMessage[]> =>
-            safeMessages(
-              await client.listMessages(
-                channelId,
-                config.follow.historyLimit,
-                after,
-              ),
-              { includeUrl: true },
-            ),
+          listMessages: async (channelId: string, after?: string): Promise<FollowMessage[]> =>
+            safeMessages(await client.listMessages(channelId, config.follow.historyLimit, after), {
+              includeUrl: true,
+            }),
           deliver: async (messages, target) => {
             if (!runtime.sendMessage)
-              throw new Error(
-                "OMP runtime cannot deliver Discord follow notifications",
-              );
+              throw new Error("OMP runtime cannot deliver Discord follow notifications");
             runtime.sendMessage(
               {
                 customType: "discord-follow",
@@ -651,9 +572,7 @@ export function createDiscordExtension(
     FollowStatus & { deliveredTotal: number; lastDeliveryAt?: string }
   > => {
     const manager = await getFollowManager();
-    const status = manager.status().active
-      ? manager.status()
-      : await manager.persistedStatus();
+    const status = manager.status().active ? manager.status() : await manager.persistedStatus();
     return {
       ...status,
       deliveredTotal: followDeliveredTotal,
@@ -698,9 +617,7 @@ export function createDiscordExtension(
         .catch((error: unknown) => {
           poll.failures += 1;
           const retryAfterMs =
-            error instanceof DiscordHttpError && error.retryAfterMs
-              ? error.retryAfterMs
-              : 0;
+            error instanceof DiscordHttpError && error.retryAfterMs ? error.retryAfterMs : 0;
           const backoffMs = Math.max(
             retryAfterMs,
             Math.min(config.follow.pollMs * 2 ** poll.failures, 60_000),
@@ -739,9 +656,7 @@ export function createDiscordExtension(
     const manager = await getFollowManager();
     const status = manager.status();
     if (status.active && status.ownerSessionId !== sessionId) {
-      throw new Error(
-        `Discord follow is owned by OMP session ${status.ownerSessionId}`,
-      );
+      throw new Error(`Discord follow is owned by OMP session ${status.ownerSessionId}`);
     }
     const stopped = await manager.stop();
     disarmFollowPoll();
@@ -753,10 +668,7 @@ export function createDiscordExtension(
     );
     return stopped;
   };
-  const recordOperation = async (
-    sessionId: string,
-    operation: OperationRecord,
-  ): Promise<void> => {
+  const recordOperation = async (sessionId: string, operation: OperationRecord): Promise<void> => {
     await appendOperation(cacheRoot, sessionId, operation);
     if (process.env.OMP_DISCORD_DEBUG === "1") {
       pi.logger.debug(
@@ -768,48 +680,30 @@ export function createDiscordExtension(
       );
     }
   };
-  const assertTargetAvailable = async (
-    target: DiscordTarget,
-  ): Promise<void> => {
+  const assertTargetAvailable = async (target: DiscordTarget): Promise<void> => {
     if (target.kind === "guild") {
-      const channels = safeGuildChannels(
-        await client.listGuildChannels(target.guildId),
-      );
+      const channels = safeGuildChannels(await client.listGuildChannels(target.guildId));
       if (!channels.some((channel) => channel.id === target.channelId)) {
-        throw new Error(
-          "Discord channel does not belong to the selected guild",
-        );
+        throw new Error("Discord channel does not belong to the selected guild");
       }
       return;
     }
 
-    const channels = safeDirectChannels(
-      await client.listDirectChannels(),
-      target.kind,
-    );
-    const channel = channels.find(
-      (candidate) => candidate.id === target.channelId,
-    );
-    if (!channel)
-      throw new Error(
-        `Discord channel does not belong to the selected ${target.kind}`,
-      );
+    const channels = safeDirectChannels(await client.listDirectChannels(), target.kind);
+    const channel = channels.find((candidate) => candidate.id === target.channelId);
+    if (!channel) throw new Error(`Discord channel does not belong to the selected ${target.kind}`);
 
     const recipientIds = Array.isArray(channel.recipientIds)
       ? channel.recipientIds.filter(
-          (recipientId): recipientId is string =>
-            typeof recipientId === "string",
+          (recipientId): recipientId is string => typeof recipientId === "string",
         )
       : [];
-    const expected =
-      target.kind === "dm" ? [target.recipientId] : target.recipientIds;
+    const expected = target.kind === "dm" ? [target.recipientId] : target.recipientIds;
     if (
       recipientIds.length !== expected.length ||
       recipientIds.some((recipientId) => !expected.includes(recipientId))
     ) {
-      throw new Error(
-        `Discord ${target.kind} recipients do not match the selected channel`,
-      );
+      throw new Error(`Discord ${target.kind} recipients do not match the selected channel`);
     }
   };
   const legacyZod = pi.zod as unknown as { z?: typeof pi.zod };
@@ -834,11 +728,7 @@ export function createDiscordExtension(
     label: string;
     description: string;
     parameters: unknown;
-    execute: (
-      params: P,
-      ctx: ExtensionContext,
-      signal: AbortSignal,
-    ) => Promise<JsonToolResult>;
+    execute: (params: P, ctx: ExtensionContext, signal: AbortSignal) => Promise<JsonToolResult>;
   }): void => {
     tools.registerTool({
       loadMode: "essential",
@@ -854,10 +744,7 @@ export function createDiscordExtension(
         ctx: ExtensionContext,
       ) {
         const result = await definition.execute(params, ctx, signal);
-        const text =
-          typeof result.value === "string"
-            ? result.value
-            : JSON.stringify(result.value);
+        const text = typeof result.value === "string" ? result.value : JSON.stringify(result.value);
         return {
           content: [{ type: "text", text }],
           details: result.details ?? result.value,
@@ -898,15 +785,9 @@ export function createDiscordExtension(
       "Prompt locally for a Discord credential, validate it, and store it in the local OS secret service. The credential is never a tool parameter.",
     parameters: z.object({}),
     async execute(_params, ctx) {
-      const token = await ctx.ui.input(
-        "Discord credential",
-        "Paste the local Discord credential",
-      );
-      if (!token?.trim())
-        throw new Error("Discord credential was not provided");
-      const account = accountDetails(
-        await client.validateCredential(token.trim()),
-      );
+      const token = await ctx.ui.input("Discord credential", "Paste the local Discord credential");
+      if (!token?.trim()) throw new Error("Discord credential was not provided");
+      const account = accountDetails(await client.validateCredential(token.trim()));
       await credential.set(token.trim());
       return { value: account };
     },
@@ -915,8 +796,7 @@ export function createDiscordExtension(
   registerJsonTool<Record<string, never>>({
     name: "discord_logout",
     label: "Discord Logout",
-    description:
-      "Remove the locally stored Discord credential from the OS secret service.",
+    description: "Remove the locally stored Discord credential from the OS secret service.",
     parameters: z.object({}),
     async execute() {
       await credential.delete();
@@ -927,8 +807,7 @@ export function createDiscordExtension(
   registerJsonTool<Record<string, never>>({
     name: "discord_list_guilds",
     label: "Discord Guilds",
-    description:
-      "List Discord servers available to the authenticated local account.",
+    description: "List Discord servers available to the authenticated local account.",
     parameters: z.object({}),
     async execute(_params, ctx) {
       const guilds = safeGuilds(await client.listGuilds());
@@ -940,13 +819,10 @@ export function createDiscordExtension(
   registerJsonTool<{ guildId: string }>({
     name: "discord_list_guild_channels",
     label: "Discord Guild Channels",
-    description:
-      "List channels only within the explicitly selected Discord guild.",
+    description: "List channels only within the explicitly selected Discord guild.",
     parameters: z.object({ guildId: z.string().min(1) }),
     async execute(params, ctx) {
-      const channels = safeGuildChannels(
-        await client.listGuildChannels(params.guildId),
-      );
+      const channels = safeGuildChannels(await client.listGuildChannels(params.guildId));
       await logOperation(ctx, "list_guild_channels", {
         count: channels.length,
       });
@@ -964,10 +840,7 @@ export function createDiscordExtension(
           : "List group direct-message channels only.",
       parameters: z.object({}),
       async execute(_params, ctx) {
-        const channels = safeDirectChannels(
-          await client.listDirectChannels(),
-          kind,
-        );
+        const channels = safeDirectChannels(await client.listDirectChannels(), kind);
         await logOperation(ctx, `list_${kind}s`, { count: channels.length });
         return { value: channels, details: { count: channels.length } };
       },
@@ -999,9 +872,7 @@ export function createDiscordExtension(
       }
       if (!target) throw new Error("target is required when scope is all");
       await assertTargetAvailable(target);
-      const messages = safeMessages(
-        await client.listMessages(target.channelId, params.limit),
-      );
+      const messages = safeMessages(await client.listMessages(target.channelId, params.limit));
       await logOperation(
         ctx,
         "list_messages",
@@ -1040,8 +911,7 @@ export function createDiscordExtension(
         signal,
       );
       const content: Array<
-        | { type: "text"; text: string }
-        | { type: "image"; data: string; mimeType: string }
+        { type: "text"; text: string } | { type: "image"; data: string; mimeType: string }
       > = [{ type: "text", text: JSON.stringify(read.attachment) }];
       if (read.attachment.contentType?.startsWith("image/")) {
         content.push({
@@ -1070,8 +940,7 @@ export function createDiscordExtension(
   registerJsonTool<{ target: TargetInput; query: string; limit: number }>({
     name: "discord_search_messages",
     label: "Discord Message Search",
-    description:
-      "Search the most recent visible messages from an explicit Discord target.",
+    description: "Search the most recent visible messages from an explicit Discord target.",
     parameters: z.object({
       target: targetSchema,
       query: z.string().min(1),
@@ -1100,8 +969,7 @@ export function createDiscordExtension(
   registerJsonTool<{ target: TargetInput; content: string }>({
     name: "discord_send_message",
     label: "Discord Send Message",
-    description:
-      "Send the supplied message to one explicit guild channel, DM, or group DM.",
+    description: "Send the supplied message to one explicit guild channel, DM, or group DM.",
     parameters: z.object({
       target: targetSchema,
       content: z.string().min(1).max(2_000),
@@ -1110,9 +978,7 @@ export function createDiscordExtension(
       const sessionId = currentSessionId(ctx);
       const target = targetFrom(params.target);
       await assertTargetAvailable(target);
-      const message = safeMessage(
-        await client.sendMessage(target.channelId, params.content),
-      );
+      const message = safeMessage(await client.sendMessage(target.channelId, params.content));
       if (!message || typeof message.messageId !== "string")
         throw new Error("Discord did not return a message identifier");
       await cacheListedMessages(cacheRoot, sessionId, [
@@ -1176,14 +1042,8 @@ export function createDiscordExtension(
 
   for (const operation of ["edit", "delete"] as const) {
     registerJsonTool<{ messageId: string; content?: string }>({
-      name:
-        operation === "edit"
-          ? "discord_edit_message"
-          : "discord_delete_message",
-      label:
-        operation === "edit"
-          ? "Discord Edit Message"
-          : "Discord Delete Message",
+      name: operation === "edit" ? "discord_edit_message" : "discord_delete_message",
+      label: operation === "edit" ? "Discord Edit Message" : "Discord Delete Message",
       description:
         "Edit or delete a message only after it appeared in this OMP session's cached message list.",
       parameters:
@@ -1199,9 +1059,7 @@ export function createDiscordExtension(
           (entry) => entry.messageId === params.messageId,
         );
         if (!message)
-          throw new Error(
-            "Discord message is not in this OMP session's cached message list",
-          );
+          throw new Error("Discord message is not in this OMP session's cached message list");
         if (message.deleted)
           throw new Error(
             "Discord message is already deleted in this OMP session's cached message list",
@@ -1211,11 +1069,7 @@ export function createDiscordExtension(
           const content = params.content;
           if (!content) throw new Error("Discord message content is required");
           const updated = safeMessage(
-            await client.editMessage(
-              message.target.channelId,
-              message.messageId,
-              content,
-            ),
+            await client.editMessage(message.target.channelId, message.messageId, content),
           );
           await updateCachedMessage(cacheRoot, sessionId, message.messageId, {
             content,
@@ -1264,9 +1118,7 @@ export function createDiscordExtension(
     },
   });
 
-  const resumeFollowForSession = async (
-    ctx: ExtensionContext,
-  ): Promise<void> => {
+  const resumeFollowForSession = async (ctx: ExtensionContext): Promise<void> => {
     const config = await configPromise;
     if (!config.follow.resumeOnStart) return;
     const persisted = await (await getFollowManager()).persistedStatus();
@@ -1314,35 +1166,26 @@ export function createDiscordExtension(
           value: `set ${section}.${key} `,
         }));
       }
-      return DISCORD_COMMANDS.filter(({ value }) =>
-        value.startsWith(normalizedPrefix),
-      );
+      return DISCORD_COMMANDS.filter(({ value }) => value.startsWith(normalizedPrefix));
     },
     handler: async (args, ctx) => {
       const { action, value } = commandParts(args);
       if (action === "login") {
         const token =
           value === undefined
-            ? await ctx.ui.input(
-                "Discord credential",
-                "Paste the local Discord credential",
-              )
+            ? await ctx.ui.input("Discord credential", "Paste the local Discord credential")
             : unquote(value);
         if (!token?.trim()) return;
         try {
           const user = await client.validateCredential(token.trim());
           await credential.set(token.trim());
           ctx.ui.notify(
-            badge(
-              `${accountStatus(user)}\nCredential stored in the local OS secret service.`,
-            ),
+            badge(`${accountStatus(user)}\nCredential stored in the local OS secret service.`),
             "info",
           );
         } catch {
           ctx.ui.notify(
-            badge(
-              "Discord credential validation failed; credential was not saved.",
-            ),
+            badge("Discord credential validation failed; credential was not saved."),
             "error",
           );
         }
@@ -1362,15 +1205,9 @@ export function createDiscordExtension(
           return;
         }
         try {
-          ctx.ui.notify(
-            badge(accountStatus(await client.getCurrentUser())),
-            "info",
-          );
+          ctx.ui.notify(badge(accountStatus(await client.getCurrentUser())), "info");
         } catch {
-          ctx.ui.notify(
-            badge("Discord credential validation failed."),
-            "error",
-          );
+          ctx.ui.notify(badge("Discord credential validation failed."), "error");
         }
         return;
       }
@@ -1379,33 +1216,21 @@ export function createDiscordExtension(
         try {
           if (followAction === "start") {
             const status = await startFollow(ctx, undefined, true);
-            ctx.ui.notify(
-              badge(`Discord follow started.\n${JSON.stringify(status)}`),
-              "info",
-            );
+            ctx.ui.notify(badge(`Discord follow started.\n${JSON.stringify(status)}`), "info");
             return;
           }
           if (followAction === "stop") {
             const status = await stopFollow(currentSessionId(ctx));
-            ctx.ui.notify(
-              badge(`Discord follow stopped.\n${JSON.stringify(status)}`),
-              "info",
-            );
+            ctx.ui.notify(badge(`Discord follow stopped.\n${JSON.stringify(status)}`), "info");
             return;
           }
           if (followAction === "status") {
             ctx.ui.notify(badge(JSON.stringify(await followStatus())), "info");
             return;
           }
-          ctx.ui.notify(
-            badge("Usage: /discord follow [start | stop | status]"),
-            "info",
-          );
+          ctx.ui.notify(badge("Usage: /discord follow [start | stop | status]"), "info");
         } catch (error) {
-          ctx.ui.notify(
-            badge(`Discord follow failed: ${String(error)}`),
-            "error",
-          );
+          ctx.ui.notify(badge(`Discord follow failed: ${String(error)}`), "error");
         }
         return;
       }
@@ -1416,9 +1241,7 @@ export function createDiscordExtension(
         ctx.ui.notify(
           badge(
             `Discord config (${dependencies.configPath ?? DEFAULT_DISCORD_CONFIG_PATH})\n${JSON.stringify(loaded.config, null, 2)}${
-              loaded.warnings.length > 0
-                ? `\nWarnings:\n${loaded.warnings.join("\n")}`
-                : ""
+              loaded.warnings.length > 0 ? `\nWarnings:\n${loaded.warnings.join("\n")}` : ""
             }`,
           ),
           "info",
@@ -1445,8 +1268,7 @@ export function createDiscordExtension(
         if (setting.kind === "boolean") {
           const normalized = rawValue.toLocaleLowerCase();
           if (["1", "true", "on", "yes"].includes(normalized)) parsed = true;
-          else if (["0", "false", "off", "no"].includes(normalized))
-            parsed = false;
+          else if (["0", "false", "off", "no"].includes(normalized)) parsed = false;
           else {
             ctx.ui.notify(badge(`${keyPath} expects a boolean value`), "error");
             return;
@@ -1479,18 +1301,13 @@ export function createDiscordExtension(
           ctx.ui.notify(
             badge(
               `Saved ${keyPath} = ${String(parsed)} in ${path}.${
-                reloaded.warnings.length > 0
-                  ? `\nWarnings:\n${reloaded.warnings.join("\n")}`
-                  : ""
+                reloaded.warnings.length > 0 ? `\nWarnings:\n${reloaded.warnings.join("\n")}` : ""
               }\nAn active follow keeps its current values until the follow or session restarts.`,
             ),
             "info",
           );
         } catch (error) {
-          ctx.ui.notify(
-            badge(`Discord config save failed: ${String(error)}`),
-            "error",
-          );
+          ctx.ui.notify(badge(`Discord config save failed: ${String(error)}`), "error");
         }
         return;
       }

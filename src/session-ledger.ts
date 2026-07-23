@@ -32,22 +32,14 @@ export interface OperationRecord {
 }
 
 /** Strict structural equality for Discord targets across every field. */
-export function targetsMatch(
-  left: DiscordTarget,
-  right: DiscordTarget,
-): boolean {
-  if (left.kind !== right.kind || left.channelId !== right.channelId)
-    return false;
-  if (left.kind === "guild" && right.kind === "guild")
-    return left.guildId === right.guildId;
-  if (left.kind === "dm" && right.kind === "dm")
-    return left.recipientId === right.recipientId;
+export function targetsMatch(left: DiscordTarget, right: DiscordTarget): boolean {
+  if (left.kind !== right.kind || left.channelId !== right.channelId) return false;
+  if (left.kind === "guild" && right.kind === "guild") return left.guildId === right.guildId;
+  if (left.kind === "dm" && right.kind === "dm") return left.recipientId === right.recipientId;
   if (left.kind === "group-dm" && right.kind === "group-dm") {
     return (
       left.recipientIds.length === right.recipientIds.length &&
-      left.recipientIds.every((recipientId) =>
-        right.recipientIds.includes(recipientId),
-      )
+      left.recipientIds.every((recipientId) => right.recipientIds.includes(recipientId))
     );
   }
   return false;
@@ -65,11 +57,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isTarget(value: unknown): value is DiscordTarget {
-  if (
-    !isRecord(value) ||
-    typeof value.kind !== "string" ||
-    typeof value.channelId !== "string"
-  )
+  if (!isRecord(value) || typeof value.kind !== "string" || typeof value.channelId !== "string")
     return false;
   if (value.kind === "guild") return typeof value.guildId === "string";
   if (value.kind === "dm") return typeof value.recipientId === "string";
@@ -99,11 +87,9 @@ function isOperationResult(value: unknown): value is OperationResult {
     (value.count === undefined || typeof value.count === "number") &&
     (value.status === undefined || typeof value.status === "string") &&
     (value.entityIds === undefined ||
-      (Array.isArray(value.entityIds) &&
-        value.entityIds.every((id) => typeof id === "string"))) &&
+      (Array.isArray(value.entityIds) && value.entityIds.every((id) => typeof id === "string"))) &&
     (value.messageIds === undefined ||
-      (Array.isArray(value.messageIds) &&
-        value.messageIds.every((id) => typeof id === "string")))
+      (Array.isArray(value.messageIds) && value.messageIds.every((id) => typeof id === "string")))
   );
 }
 
@@ -166,13 +152,7 @@ async function readMessages(
   directory: string,
   sessionId: string,
 ): Promise<SentMessage[]> {
-  return readJsonArray(
-    root,
-    directory,
-    sessionId,
-    isSentMessage,
-    "message cache",
-  );
+  return readJsonArray(root, directory, sessionId, isSentMessage, "message cache");
 }
 
 async function writeMessages(
@@ -184,10 +164,7 @@ async function writeMessages(
   await writeJsonArray(root, directory, sessionId, messages);
 }
 
-export async function listCachedMessages(
-  root: string,
-  sessionId: string,
-): Promise<SentMessage[]> {
+export async function listCachedMessages(root: string, sessionId: string): Promise<SentMessage[]> {
   return readMessages(root, SELECTION_CACHE_DIRECTORY, sessionId);
 }
 
@@ -198,9 +175,7 @@ export async function cacheListedMessages(
 ): Promise<void> {
   const messages = await listCachedMessages(root, sessionId);
   for (const message of listed) {
-    const index = messages.findIndex(
-      (entry) => entry.messageId === message.messageId,
-    );
+    const index = messages.findIndex((entry) => entry.messageId === message.messageId);
     if (index === -1) messages.push(message);
     else
       messages[index] = {
@@ -216,9 +191,7 @@ export async function updateCachedMessage(
   root: string,
   sessionId: string,
   messageId: string,
-  patch: Partial<
-    Pick<SentMessage, "content" | "updatedAt" | "editedAt" | "deleted">
-  >,
+  patch: Partial<Pick<SentMessage, "content" | "updatedAt" | "editedAt" | "deleted">>,
 ): Promise<void> {
   const messages = await listCachedMessages(root, sessionId);
   const index = messages.findIndex((entry) => entry.messageId === messageId);
@@ -230,17 +203,8 @@ export async function updateCachedMessage(
   await writeMessages(root, SELECTION_CACHE_DIRECTORY, sessionId, messages);
 }
 
-export async function listOperations(
-  root: string,
-  sessionId: string,
-): Promise<OperationRecord[]> {
-  return readJsonArray(
-    root,
-    OPERATION_DIRECTORY,
-    sessionId,
-    isOperationRecord,
-    "operation ledger",
-  );
+export async function listOperations(root: string, sessionId: string): Promise<OperationRecord[]> {
+  return readJsonArray(root, OPERATION_DIRECTORY, sessionId, isOperationRecord, "operation ledger");
 }
 
 export async function appendOperation(

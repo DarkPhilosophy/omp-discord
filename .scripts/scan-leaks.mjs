@@ -6,7 +6,10 @@ const root = new URL("..", import.meta.url).pathname;
 const ignoredDirectories = new Set([".git", "node_modules"]);
 const ignoredFiles = new Set(["bun.lock"]);
 const rules = [
-  { name: "Discord token", pattern: /(?:mfa\.)[A-Za-z0-9_-]{20,}|(?:[A-Za-z0-9_-]{24}\.){2}[A-Za-z0-9_-]{20,}/g },
+  {
+    name: "Discord token",
+    pattern: /(?:mfa\.)[A-Za-z0-9_-]{20,}|(?:[A-Za-z0-9_-]{24}\.){2}[A-Za-z0-9_-]{20,}/g,
+  },
   { name: "private key", pattern: /-----BEGIN(?: [A-Z]+)? PRIVATE KEY-----/g },
 ];
 const findings = [];

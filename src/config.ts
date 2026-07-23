@@ -25,12 +25,7 @@ export type DiscordConfigPatch = {
   attachments?: Partial<DiscordConfig["attachments"]>;
 };
 
-export const DEFAULT_DISCORD_CONFIG_PATH = join(
-  homedir(),
-  ".omp",
-  "agent",
-  "discord.yml",
-);
+export const DEFAULT_DISCORD_CONFIG_PATH = join(homedir(), ".omp", "agent", "discord.yml");
 
 export const DEFAULT_DISCORD_CONFIG: DiscordConfig = {
   follow: {
@@ -178,12 +173,7 @@ export const DISCORD_CONFIG_SETTINGS: DiscordConfigSetting[] = (
   section: spec.yamlSection,
   key: spec.yamlKey,
   env: spec.envKey,
-  kind:
-    name === "resumeOnStart"
-      ? "boolean"
-      : name === "display"
-        ? "string"
-        : "number",
+  kind: name === "resumeOnStart" ? "boolean" : name === "display" ? "string" : "number",
   ...(name === "display" ? { values: ["name", "id"] as const } : {}),
 }));
 
@@ -221,11 +211,8 @@ function numberSetting(
         : typeof candidate.value === "string" && candidate.value.trim() !== ""
           ? Number(candidate.value)
           : Number.NaN;
-    if (Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum)
-      return parsed;
-    warnings.push(
-      `${candidate.source} must be an integer from ${minimum} to ${maximum}`,
-    );
+    if (Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum) return parsed;
+    warnings.push(`${candidate.source} must be an integer from ${minimum} to ${maximum}`);
   }
   return fallback;
 }
@@ -296,9 +283,7 @@ async function readYaml(
   try {
     const parsed = Bun.YAML.parse(source);
     const root = record(parsed);
-    return root
-      ? { root }
-      : { root: {}, warning: `${path} must contain a YAML mapping` };
+    return root ? { root } : { root: {}, warning: `${path} must contain a YAML mapping` };
   } catch {
     return { root: {}, warning: `${path} contains invalid YAML` };
   }
@@ -403,19 +388,13 @@ export async function loadDiscordConfig(
   };
 }
 
-function applyPatch(
-  root: Record<string, unknown>,
-  patch: DiscordConfigPatch,
-): void {
+function applyPatch(root: Record<string, unknown>, patch: DiscordConfigPatch): void {
   if (patch.follow) {
     const follow = { ...record(root.follow) };
     if (patch.follow.pollMs !== undefined) follow.poll_ms = patch.follow.pollMs;
-    if (patch.follow.batchSize !== undefined)
-      follow.batch_size = patch.follow.batchSize;
-    if (patch.follow.flushMs !== undefined)
-      follow.flush_ms = patch.follow.flushMs;
-    if (patch.follow.historyLimit !== undefined)
-      follow.history_limit = patch.follow.historyLimit;
+    if (patch.follow.batchSize !== undefined) follow.batch_size = patch.follow.batchSize;
+    if (patch.follow.flushMs !== undefined) follow.flush_ms = patch.follow.flushMs;
+    if (patch.follow.historyLimit !== undefined) follow.history_limit = patch.follow.historyLimit;
     if (patch.follow.resumeOnStart !== undefined)
       follow.resume_on_start = patch.follow.resumeOnStart;
     root.follow = follow;
@@ -432,10 +411,7 @@ function applyPatch(
   }
 }
 
-export async function saveDiscordConfig(
-  path: string,
-  patch: DiscordConfigPatch,
-): Promise<void> {
+export async function saveDiscordConfig(path: string, patch: DiscordConfigPatch): Promise<void> {
   const existing = await readYaml(path);
   if (existing.warning) throw new Error(existing.warning);
   const root = existing.root;

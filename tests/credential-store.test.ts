@@ -14,7 +14,9 @@ function runnerFor(result: SecretToolResult | Error, calls: Call[]) {
 describe("SecretToolCredentialStore", () => {
   test("trims the looked-up token and treats empty output as disconnected", async () => {
     const calls: Call[] = [];
-    const store = new SecretToolCredentialStore({ run: runnerFor({ stdout: "  token-123\n", stderr: "", exitCode: 0 }, calls) });
+    const store = new SecretToolCredentialStore({
+      run: runnerFor({ stdout: "  token-123\n", stderr: "", exitCode: 0 }, calls),
+    });
 
     await expect(store.get()).resolves.toBe("token-123");
     expect(calls[0]).toEqual({
@@ -30,7 +32,9 @@ describe("SecretToolCredentialStore", () => {
   });
 
   test("returns disconnected when secret-tool is unavailable or lookup misses", async () => {
-    const unavailable = new SecretToolCredentialStore({ run: runnerFor(new Error("secret-tool: command not found"), []) });
+    const unavailable = new SecretToolCredentialStore({
+      run: runnerFor(new Error("secret-tool: command not found"), []),
+    });
     await expect(unavailable.get()).resolves.toBeUndefined();
 
     const notFound = new SecretToolCredentialStore({

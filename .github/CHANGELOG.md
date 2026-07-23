@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.1 — 2026-07-23
+
+### Added
+
+- The repository is now an OMP plugin marketplace (`.omp-plugin/marketplace.json`, catalog `darkphilosophy-discord`), enabling managed installs and upgrades. The release gate verifies the catalog version matches the package version.
+
+### Changed
+
+- Project metadata and tooling are synchronized with `omp-headroom`: `DarkPhilosophy` author, canonical `git+` repository URL, packaged README/CHANGELOG, the `check`/`format`/`typecheck`/`test`/`scan`/`verify` script convention, the strict shared `tsconfig.json` (ES2023 lib, `verbatimModuleSyntax`), and the full shared Biome configuration (VCS-aware, 100-column, double quotes).
+
 ## 0.1.0 — 2026-07-23
 
 Initial release.

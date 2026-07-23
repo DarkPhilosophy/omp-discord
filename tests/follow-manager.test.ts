@@ -16,7 +16,9 @@ const managers: FollowManager[] = [];
 
 afterEach(async () => {
   for (const manager of managers.splice(0)) await manager.detach();
-  await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+  await Promise.all(
+    temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })),
+  );
 });
 
 async function statePath(): Promise<string> {
@@ -48,8 +50,11 @@ describe("FollowManager", () => {
       flushMs: 10_000,
       historyLimit: 100,
       now: () => now,
-      listMessages: async (_channelId: string, after?: string) => available.filter((item) => !after || BigInt(item.messageId) > BigInt(after)),
-      deliver: async (messages: FollowMessage[]) => { delivered.push(messages); },
+      listMessages: async (_channelId: string, after?: string) =>
+        available.filter((item) => !after || BigInt(item.messageId) > BigInt(after)),
+      deliver: async (messages: FollowMessage[]) => {
+        delivered.push(messages);
+      },
     };
 
     const first = new FollowManager(options);
@@ -88,8 +93,11 @@ describe("FollowManager", () => {
       batchSize: 2,
       flushMs: 60_000,
       historyLimit: 100,
-      listMessages: async (_channelId, after) => available.filter((item) => !after || BigInt(item.messageId) > BigInt(after)),
-      deliver: async (messages) => { delivered.push(messages); },
+      listMessages: async (_channelId, after) =>
+        available.filter((item) => !after || BigInt(item.messageId) > BigInt(after)),
+      deliver: async (messages) => {
+        delivered.push(messages);
+      },
     });
     managers.push(manager);
 
@@ -111,7 +119,8 @@ describe("FollowManager", () => {
       batchSize: 1,
       flushMs: 60_000,
       historyLimit: 100,
-      listMessages: async (_channelId: string, after?: string) => available.filter((item) => !after || BigInt(item.messageId) > BigInt(after)),
+      listMessages: async (_channelId: string, after?: string) =>
+        available.filter((item) => !after || BigInt(item.messageId) > BigInt(after)),
       deliver: async (messages: FollowMessage[]) => {
         if (fail) throw new Error("delivery unavailable");
         delivered.push(messages);

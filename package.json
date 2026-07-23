@@ -1,13 +1,13 @@
 {
   "name": "omp-discord",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Explicit, local Discord account operations for Oh My Pi.",
-  "author": "Alex",
+  "author": "DarkPhilosophy",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/DarkPhilosophy/omp-discord.git"
+    "url": "git+https://github.com/DarkPhilosophy/omp-discord.git"
   },
   "exports": "./src/index.ts",
   "omp": {
@@ -17,15 +17,17 @@
   },
   "files": [
     "src",
+    "README.md",
+    ".github/CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
-    "format": "bunx biome format --write .",
-    "lint": "bunx biome lint .",
-    "typecheck": "bunx tsc --noEmit",
-    "test": "bun test",
-    "scan": "bun run .scripts/scan-leaks.mjs",
-    "check": "bun run lint && bun run typecheck && bun run test && bun run scan"
+    "check": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests/",
+    "scan": "bun .scripts/scan-leaks.mjs",
+    "verify": "bun run check && bun run typecheck && bun run test && bun run scan"
   },
   "overrides": {
     "adm-zip": "^0.6.0",

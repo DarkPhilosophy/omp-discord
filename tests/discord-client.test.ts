@@ -35,7 +35,9 @@ describe("DiscordClient", () => {
       credential: { get: async () => "session-secret" },
       fetch: async (url, init) => {
         calls.push({ url: String(url), init: init ?? {} });
-        return new Response(JSON.stringify({ id: "message-1", content: "updated" }), { status: 200 });
+        return new Response(JSON.stringify({ id: "message-1", content: "updated" }), {
+          status: 200,
+        });
       },
     });
 
@@ -69,14 +71,22 @@ describe("DiscordClient", () => {
     let credentialReads = 0;
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const client = new DiscordClient({
-      credential: { get: async () => { credentialReads++; return undefined; } },
+      credential: {
+        get: async () => {
+          credentialReads++;
+          return undefined;
+        },
+      },
       fetch: async (url, init) => {
         calls.push({ url: String(url), init: init ?? {} });
         return Response.json({ id: "me", username: "Alex" });
       },
     });
 
-    await expect(client.validateCredential("direct-credential")).resolves.toEqual({ id: "me", username: "Alex" });
+    await expect(client.validateCredential("direct-credential")).resolves.toEqual({
+      id: "me",
+      username: "Alex",
+    });
     expect(credentialReads).toBe(0);
     expect(calls[0]?.init.headers).toMatchObject({ authorization: "direct-credential" });
   });
@@ -98,13 +108,15 @@ describe("DiscordClient", () => {
         if (calls.length === 1) {
           return Response.json({
             id: "message-1",
-            attachments: [{
-              id: "attachment-1",
-              filename: "notes.txt",
-              content_type: "text/plain",
-              size: 5,
-              url: "https://cdn.discordapp.com/attachments/channel/attachment/notes.txt?signed=yes",
-            }],
+            attachments: [
+              {
+                id: "attachment-1",
+                filename: "notes.txt",
+                content_type: "text/plain",
+                size: 5,
+                url: "https://cdn.discordapp.com/attachments/channel/attachment/notes.txt?signed=yes",
+              },
+            ],
           });
         }
         return new Response("hello", {
@@ -113,12 +125,9 @@ describe("DiscordClient", () => {
       },
     });
 
-    await expect(client.readAttachment(
-      "channel-1",
-      "message-1",
-      "attachment-1",
-      10,
-    )).resolves.toEqual({
+    await expect(
+      client.readAttachment("channel-1", "message-1", "attachment-1", 10),
+    ).resolves.toEqual({
       attachment: {
         id: "attachment-1",
         filename: "notes.txt",
@@ -145,32 +154,23 @@ describe("DiscordClient", () => {
     };
     const client = new DiscordClient({
       credential: { get: async () => "session-secret" },
-      fetch: async (url) => String(url).startsWith("https://discord.com/api/")
-        ? Response.json({ id: "message-1", attachments: [attachment] })
-        : new Response(new Uint8Array(20)),
+      fetch: async (url) =>
+        String(url).startsWith("https://discord.com/api/")
+          ? Response.json({ id: "message-1", attachments: [attachment] })
+          : new Response(new Uint8Array(20)),
     });
 
-    await expect(client.readAttachment(
-      "channel-1",
-      "message-1",
-      "missing",
-      100,
-    )).rejects.toThrow("not found");
-    await expect(client.readAttachment(
-      "channel-1",
-      "message-1",
-      "attachment-1",
-      10,
-    )).rejects.toThrow("20 bytes exceeds");
+    await expect(client.readAttachment("channel-1", "message-1", "missing", 100)).rejects.toThrow(
+      "not found",
+    );
+    await expect(
+      client.readAttachment("channel-1", "message-1", "attachment-1", 10),
+    ).rejects.toThrow("20 bytes exceeds");
 
     attachment.size = 5;
     attachment.url = "https://example.com/payload";
-    await expect(client.readAttachment(
-      "channel-1",
-      "message-1",
-      "attachment-1",
-      10,
-    )).rejects.toThrow("untrusted");
+    await expect(
+      client.readAttachment("channel-1", "message-1", "attachment-1", 10),
+    ).rejects.toThrow("untrusted");
   });
-
 });

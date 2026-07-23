@@ -2,21 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  z,
-  type ExtensionAPI,
-  type ExtensionContext,
-} from "@oh-my-pi/pi-coding-agent";
 import { zodToWireSchema } from "@oh-my-pi/pi-ai/utils/schema";
-import { createDiscordExtension } from "../src/index.ts";
+import { type ExtensionAPI, type ExtensionContext, z } from "@oh-my-pi/pi-coding-agent";
 import type { DiscordClient } from "../src/discord-client.ts";
+import { createDiscordExtension } from "../src/index.ts";
 
 const roots: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { force: true, recursive: true })),
-  );
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 type ToolParameters = { parse: (params: unknown) => unknown };
 
@@ -42,8 +36,7 @@ function extensionApi(
   return {
     zod: z,
     setLabel: () => undefined,
-    registerCommand: (name: string, command: RegisteredCommand) =>
-      commands.set(name, command),
+    registerCommand: (name: string, command: RegisteredCommand) => commands.set(name, command),
     registerTool: (tool: RegisteredTool) => {
       if (!tool.name) throw new Error("tool missing name");
       tools.set(tool.name, tool);
@@ -102,9 +95,7 @@ describe("Discord extension", () => {
       "discord_send_message",
       "discord_status",
     ]);
-    expect(
-      [...tools.values()].every((tool) => tool.loadMode === "essential"),
-    ).toBe(true);
+    expect([...tools.values()].every((tool) => tool.loadMode === "essential")).toBe(true);
     expect(commands.get("discord")?.getArgumentCompletions?.("lo")).toEqual([
       {
         label: "login",
@@ -133,19 +124,14 @@ describe("Discord extension", () => {
     });
 
     const tool = tools.get("discord_list_messages");
-    if (!tool?.parameters)
-      throw new Error("discord_list_messages is missing parameters");
+    if (!tool?.parameters) throw new Error("discord_list_messages is missing parameters");
     const schema = zodToWireSchema(tool.parameters as never) as {
       properties?: Record<string, unknown>;
       required?: string[];
     };
 
     expect(schema.required).toBeUndefined();
-    expect(Object.keys(schema.properties ?? {}).sort()).toEqual([
-      "limit",
-      "scope",
-      "target",
-    ]);
+    expect(Object.keys(schema.properties ?? {}).sort()).toEqual(["limit", "scope", "target"]);
   });
   test("lists safe attachment metadata and returns image content without exposing CDN URLs", async () => {
     const tools = new Map<string, RegisteredTool>();
@@ -240,10 +226,7 @@ describe("Discord extension", () => {
   });
 
   test("validates a direct credential before storing it without exposing its value", async () => {
-    const tools = new Map<
-      string,
-      { execute: (...args: never[]) => Promise<unknown> }
-    >();
+    const tools = new Map<string, { execute: (...args: never[]) => Promise<unknown> }>();
     const commands = new Map<string, RegisteredCommand>();
     const validated: string[] = [];
     const stored: string[] = [];
@@ -287,10 +270,7 @@ describe("Discord extension", () => {
   });
 
   test("authenticates and stores a credential through the native login tool without returning it", async () => {
-    const tools = new Map<
-      string,
-      { execute: (...args: never[]) => Promise<unknown> }
-    >();
+    const tools = new Map<string, { execute: (...args: never[]) => Promise<unknown> }>();
     const validated: string[] = [];
     const stored: string[] = [];
     const deleted: boolean[] = [];
@@ -315,19 +295,11 @@ describe("Discord extension", () => {
 
     const tool = tools.get("discord_login");
     if (!tool) throw new Error("missing discord_login tool");
-    const executeLogin = tool.execute as unknown as (
-      ...args: unknown[]
-    ) => Promise<unknown>;
-    const result = (await executeLogin(
-      "call",
-      {},
-      new AbortController().signal,
-      undefined,
-      {
-        sessionManager: { getSessionId: () => "session-a" },
-        ui: { input: async () => "credential-value" },
-      } as unknown as ExtensionContext,
-    )) as { content: Array<{ text: string }> };
+    const executeLogin = tool.execute as unknown as (...args: unknown[]) => Promise<unknown>;
+    const result = (await executeLogin("call", {}, new AbortController().signal, undefined, {
+      sessionManager: { getSessionId: () => "session-a" },
+      ui: { input: async () => "credential-value" },
+    } as unknown as ExtensionContext)) as { content: Array<{ text: string }> };
 
     expect(validated).toEqual(["credential-value"]);
     expect(stored).toEqual(["credential-value"]);
@@ -339,9 +311,7 @@ describe("Discord extension", () => {
 
     const logout = tools.get("discord_logout");
     if (!logout) throw new Error("missing discord_logout tool");
-    const executeLogout = logout.execute as unknown as (
-      ...args: unknown[]
-    ) => Promise<unknown>;
+    const executeLogout = logout.execute as unknown as (...args: unknown[]) => Promise<unknown>;
     const logoutResult = (await executeLogout(
       "call",
       {},
@@ -356,10 +326,7 @@ describe("Discord extension", () => {
   });
 
   test("validates the Discord credential and reports the active account", async () => {
-    const tools = new Map<
-      string,
-      { execute: (...args: never[]) => Promise<unknown> }
-    >();
+    const tools = new Map<string, { execute: (...args: never[]) => Promise<unknown> }>();
     const commands = new Map<string, RegisteredCommand>();
     let currentUserLookups = 0;
     const client = {
@@ -382,8 +349,7 @@ describe("Discord extension", () => {
     if (!command) throw new Error("missing discord command");
     await command.handler("status", {
       ui: {
-        notify: (message: string, level: string) =>
-          notifications.push({ level, message }),
+        notify: (message: string, level: string) => notifications.push({ level, message }),
       },
     } as unknown as ExtensionContext);
 
@@ -400,10 +366,7 @@ describe("Discord extension", () => {
   test("permits mutations only for message identifiers returned by this session's message list", async () => {
     const cacheRoot = await mkdtemp(join(tmpdir(), "omp-discord-index-"));
     roots.push(cacheRoot);
-    const tools = new Map<
-      string,
-      { execute: (...args: never[]) => Promise<unknown> }
-    >();
+    const tools = new Map<string, { execute: (...args: never[]) => Promise<unknown> }>();
     const calls: Array<{
       action: string;
       channelId: string;
@@ -414,17 +377,11 @@ describe("Discord extension", () => {
       deleteMessage: async (channelId: string, messageId: string) => {
         calls.push({ action: "delete", channelId, messageId });
       },
-      editMessage: async (
-        channelId: string,
-        messageId: string,
-        content: string,
-      ) => {
+      editMessage: async (channelId: string, messageId: string, content: string) => {
         calls.push({ action: "edit", channelId, content, messageId });
         return { content, id: messageId };
       },
-      listDirectChannels: async () => [
-        { id: "dm-1", recipients: [{ id: "user-1" }], type: 1 },
-      ],
+      listDirectChannels: async () => [{ id: "dm-1", recipients: [{ id: "user-1" }], type: 1 }],
       sendMessage: async () => ({
         content: "sent in session A",
         id: "message-1",
@@ -467,12 +424,7 @@ describe("Discord extension", () => {
       { messageId: "message-1", content: "edited in session A" },
       "session-a",
     );
-    await execute(
-      tools,
-      "discord_delete_message",
-      { messageId: "message-1" },
-      "session-a",
-    );
+    await execute(tools, "discord_delete_message", { messageId: "message-1" }, "session-a");
 
     const cached = (await execute(
       tools,
@@ -490,20 +442,10 @@ describe("Discord extension", () => {
       }),
     ]);
     await expect(
-      execute(
-        tools,
-        "discord_delete_message",
-        { messageId: "message-1" },
-        "session-a",
-      ),
+      execute(tools, "discord_delete_message", { messageId: "message-1" }, "session-a"),
     ).rejects.toThrow("cached message list");
     await expect(
-      execute(
-        tools,
-        "discord_delete_message",
-        { messageId: "message-1" },
-        "session-b",
-      ),
+      execute(tools, "discord_delete_message", { messageId: "message-1" }, "session-b"),
     ).rejects.toThrow("cached message list");
 
     expect(calls).toEqual([
@@ -520,10 +462,7 @@ describe("Discord extension", () => {
   test("rejects a target that does not belong to its declared category", async () => {
     const cacheRoot = await mkdtemp(join(tmpdir(), "omp-discord-index-"));
     roots.push(cacheRoot);
-    const tools = new Map<
-      string,
-      { execute: (...args: never[]) => Promise<unknown> }
-    >();
+    const tools = new Map<string, { execute: (...args: never[]) => Promise<unknown> }>();
     let sent = false;
     const client = {
       listGuildChannels: async () => [{ id: "other-channel", type: 0 }],
@@ -552,10 +491,7 @@ describe("Discord extension", () => {
   test("separates live channel reads from this session's sent-message archive", async () => {
     const cacheRoot = await mkdtemp(join(tmpdir(), "omp-discord-index-"));
     roots.push(cacheRoot);
-    const tools = new Map<
-      string,
-      { execute: (...args: never[]) => Promise<unknown> }
-    >();
+    const tools = new Map<string, { execute: (...args: never[]) => Promise<unknown> }>();
     let liveReads = 0;
     const client = {
       listGuildChannels: async () => [{ id: "channel-1", type: 0 }],
@@ -622,24 +558,14 @@ describe("Discord extension", () => {
     ]);
     expect(liveReads).toBe(1);
     await expect(
-      execute(
-        tools,
-        "discord_delete_message",
-        { messageId: "live-1" },
-        "session-a",
-      ),
+      execute(tools, "discord_delete_message", { messageId: "live-1" }, "session-a"),
     ).rejects.toThrow("cached message list");
   });
 
   test("lists selectable message identifiers with their timestamps and content", async () => {
-    const tools = new Map<
-      string,
-      { execute: (...args: never[]) => Promise<unknown> }
-    >();
+    const tools = new Map<string, { execute: (...args: never[]) => Promise<unknown> }>();
     const client = {
-      listDirectChannels: async () => [
-        { id: "dm-1", recipients: [{ id: "user-1" }], type: 1 },
-      ],
+      listDirectChannels: async () => [{ id: "dm-1", recipients: [{ id: "user-1" }], type: 1 }],
       listMessages: async () => [
         {
           author: { id: "user-1", username: "Alex" },
@@ -677,14 +603,9 @@ describe("Discord extension", () => {
   test("lists live channel messages without making them mutable", async () => {
     const cacheRoot = await mkdtemp(join(tmpdir(), "omp-discord-index-"));
     roots.push(cacheRoot);
-    const tools = new Map<
-      string,
-      { execute: (...args: never[]) => Promise<unknown> }
-    >();
+    const tools = new Map<string, { execute: (...args: never[]) => Promise<unknown> }>();
     const client = {
-      listDirectChannels: async () => [
-        { id: "dm-1", recipients: [{ id: "user-1" }], type: 1 },
-      ],
+      listDirectChannels: async () => [{ id: "dm-1", recipients: [{ id: "user-1" }], type: 1 }],
       listMessages: async () => [
         {
           content: "first message",
@@ -721,24 +642,14 @@ describe("Discord extension", () => {
     ]);
 
     await expect(
-      execute(
-        tools,
-        "discord_delete_message",
-        { messageId: "first" },
-        "session-a",
-      ),
+      execute(tools, "discord_delete_message", { messageId: "first" }, "session-a"),
     ).rejects.toThrow("cached message list");
   });
 
   test("searches only the most recent visible channel messages", async () => {
-    const tools = new Map<
-      string,
-      { execute: (...args: never[]) => Promise<unknown> }
-    >();
+    const tools = new Map<string, { execute: (...args: never[]) => Promise<unknown> }>();
     const client = {
-      listDirectChannels: async () => [
-        { id: "dm-1", recipients: [{ id: "user-1" }], type: 1 },
-      ],
+      listDirectChannels: async () => [{ id: "dm-1", recipients: [{ id: "user-1" }], type: 1 }],
       listMessages: async () => [
         {
           content: "first message",
@@ -773,10 +684,7 @@ describe("Discord extension", () => {
 });
 
 test("exposes the authenticated account through the native status tool", async () => {
-  const tools = new Map<
-    string,
-    { execute: (...args: never[]) => Promise<unknown> }
-  >();
+  const tools = new Map<string, { execute: (...args: never[]) => Promise<unknown> }>();
   let currentUserLookups = 0;
   const client = {
     getCurrentUser: async () => {
@@ -816,15 +724,11 @@ test("exposes the authenticated account through the native status tool", async (
 
 describe("Discord follow extension integration", () => {
   test("starts, reports, and stops one session-owned follow", async () => {
-    const cacheRoot = await mkdtemp(
-      join(tmpdir(), "omp-discord-follow-index-"),
-    );
+    const cacheRoot = await mkdtemp(join(tmpdir(), "omp-discord-follow-index-"));
     roots.push(cacheRoot);
     const tools = new Map<string, RegisteredTool>();
     const client = {
-      listDirectChannels: async () => [
-        { id: "dm-1", recipients: [{ id: "user-1" }], type: 1 },
-      ],
+      listDirectChannels: async () => [{ id: "dm-1", recipients: [{ id: "user-1" }], type: 1 }],
       listMessages: async () => [
         {
           content: "baseline",
@@ -850,12 +754,7 @@ describe("Discord follow extension integration", () => {
       }),
     );
 
-    const status = (await execute(
-      tools,
-      "discord_follow_status",
-      {},
-      "session-a",
-    )) as {
+    const status = (await execute(tools, "discord_follow_status", {}, "session-a")) as {
       details: { enabled: boolean; target: { channelId: string } };
     };
     expect(status.details).toEqual(
@@ -865,12 +764,7 @@ describe("Discord follow extension integration", () => {
       }),
     );
 
-    const stopped = (await execute(
-      tools,
-      "discord_follow_stop",
-      {},
-      "session-a",
-    )) as {
+    const stopped = (await execute(tools, "discord_follow_stop", {}, "session-a")) as {
       details: { enabled: boolean; ownerSessionId?: string };
     };
     expect(stopped.details.enabled).toBe(false);
@@ -896,10 +790,7 @@ describe("Discord follow background job", () => {
         run: (ctx: {
           jobId: string;
           signal: AbortSignal;
-          reportProgress: (
-            text: string,
-            details?: Record<string, unknown>,
-          ) => Promise<void>;
+          reportProgress: (text: string, details?: Record<string, unknown>) => Promise<void>;
           markRunning: () => void;
         }) => Promise<string>,
         options?: { id?: string; ownerId?: string },
@@ -922,9 +813,7 @@ describe("Discord follow background job", () => {
   }
 
   const followClient = {
-    listDirectChannels: async () => [
-      { id: "dm-1", recipients: [{ id: "user-1" }], type: 1 },
-    ],
+    listDirectChannels: async () => [{ id: "dm-1", recipients: [{ id: "user-1" }], type: 1 }],
     listMessages: async () => [
       {
         content: "baseline",
@@ -946,12 +835,7 @@ describe("Discord follow background job", () => {
       jobRegistry: fakeJobRegistry(calls),
     });
 
-    await execute(
-      tools,
-      "discord_follow_start",
-      { target: dmTarget },
-      "session-a",
-    );
+    await execute(tools, "discord_follow_start", { target: dmTarget }, "session-a");
     expect(calls.length).toBe(1);
     expect(calls[0]?.type).toBe("task");
     expect(calls[0]?.options?.ownerId).toBe("Main");
@@ -973,12 +857,7 @@ describe("Discord follow background job", () => {
       jobRegistry: fakeJobRegistry(calls),
     });
 
-    await execute(
-      tools,
-      "discord_follow_start",
-      { target: dmTarget },
-      "session-a",
-    );
+    await execute(tools, "discord_follow_start", { target: dmTarget }, "session-a");
     await execute(tools, "discord_follow_stop", {}, "session-a");
 
     const summary = await calls[0]?.result;
@@ -997,22 +876,12 @@ describe("Discord follow background job", () => {
       jobRegistry: fakeJobRegistry(calls),
     });
 
-    await execute(
-      tools,
-      "discord_follow_start",
-      { target: dmTarget },
-      "session-a",
-    );
+    await execute(tools, "discord_follow_start", { target: dmTarget }, "session-a");
     calls[0]?.abort.abort();
 
     // The job result resolves only after the abort listener's stopFollow completes.
     expect(await calls[0]?.result).toContain("stopped");
-    const status = (await execute(
-      tools,
-      "discord_follow_status",
-      {},
-      "session-a",
-    )) as {
+    const status = (await execute(tools, "discord_follow_status", {}, "session-a")) as {
       details: { enabled: boolean };
     };
     expect(status.details.enabled).toBe(false);
@@ -1037,12 +906,7 @@ describe("Discord follow background job", () => {
       details: { enabled: boolean };
     };
     expect(started.details.enabled).toBe(true);
-    const stopped = (await execute(
-      tools,
-      "discord_follow_stop",
-      {},
-      "session-a",
-    )) as {
+    const stopped = (await execute(tools, "discord_follow_stop", {}, "session-a")) as {
       details: { enabled: boolean };
     };
     expect(stopped.details.enabled).toBe(false);
@@ -1051,16 +915,10 @@ describe("Discord follow background job", () => {
 
 describe("Discord follow delivery", () => {
   test("delivers plugin steering batches with attachment links", async () => {
-    const cacheRoot = await mkdtemp(
-      join(tmpdir(), "omp-discord-follow-deliver-"),
-    );
+    const cacheRoot = await mkdtemp(join(tmpdir(), "omp-discord-follow-deliver-"));
     roots.push(cacheRoot);
     const configPath = join(cacheRoot, "discord.yml");
-    await writeFile(
-      configPath,
-      "follow:\n  batch_size: 1\n  poll_ms: 250\n",
-      "utf8",
-    );
+    await writeFile(configPath, "follow:\n  batch_size: 1\n  poll_ms: 250\n", "utf8");
 
     const tools = new Map<string, RegisteredTool>();
     const sent: Array<{
@@ -1099,9 +957,7 @@ describe("Discord follow delivery", () => {
 
     let calls = 0;
     const client = {
-      listDirectChannels: async () => [
-        { id: "dm-1", recipients: [{ id: "user-1" }], type: 1 },
-      ],
+      listDirectChannels: async () => [{ id: "dm-1", recipients: [{ id: "user-1" }], type: 1 }],
       listMessages: async () => {
         calls += 1;
         const baseline = {
@@ -1165,16 +1021,12 @@ describe("Discord follow delivery", () => {
     expect(sent[0]?.options).toEqual({ deliverAs: "steer", triggerTurn: true });
     const payload = sent[0]?.message.content ?? "";
     expect(payload).toContain("look at this image");
-    expect(payload).toContain(
-      "https://cdn.discordapp.com/attachments/dm-1/att-1/image.png",
-    );
+    expect(payload).toContain("https://cdn.discordapp.com/attachments/dm-1/att-1/image.png");
 
     // The list tool must keep stripping CDN urls even for the same client data.
     const list = tools.get("discord_list_messages");
     if (!list?.parameters) throw new Error("missing discord_list_messages");
-    const listed = (await (
-      list.execute as (...args: unknown[]) => Promise<unknown>
-    )(
+    const listed = (await (list.execute as (...args: unknown[]) => Promise<unknown>)(
       "call",
       list.parameters.parse({
         limit: 5,

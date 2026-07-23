@@ -7,9 +7,9 @@ import {
   cacheListedMessages,
   listCachedMessages,
   listOperations,
-  updateCachedMessage,
   type OperationRecord,
   type SentMessage,
+  updateCachedMessage,
 } from "../src/session-ledger.ts";
 
 const roots: string[] = [];
