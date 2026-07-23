@@ -27,6 +27,10 @@
     "scan": "bun run .scripts/scan-leaks.mjs",
     "check": "bun run lint && bun run typecheck && bun run test && bun run scan"
   },
+  "overrides": {
+    "adm-zip": "^0.6.0",
+    "sharp": "^0.35.0"
+  },
   "peerDependencies": {
     "@oh-my-pi/pi-coding-agent": "^17.0.0"
   },
