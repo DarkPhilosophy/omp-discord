@@ -52,11 +52,6 @@ jobs:
           if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) {
             throw new Error(`stable-release workflow accepts plain semver only: ${pkg.version}`);
           }
-          const catalog = JSON.parse(fs.readFileSync(".omp-plugin/marketplace.json", "utf8"));
-          const entry = catalog.plugins?.find((plugin) => plugin.name === "omp-discord");
-          if (entry?.version !== pkg.version) {
-            throw new Error(`marketplace catalog version (${entry?.version}) must equal ${pkg.version}`);
-          }
           NODE
 
       - name: Verify source and runtime contracts

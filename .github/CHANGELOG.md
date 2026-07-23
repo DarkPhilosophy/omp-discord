@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Removed
+
+- The `darkphilosophy-discord` marketplace catalog. `omp-discord` is distributed through the single `darkphilosophy` catalog.
+
 ## 0.1.1 — 2026-07-23
 
 ### Added
@@ -8,7 +14,7 @@
 
 ### Changed
 
-- Project metadata and tooling are synchronized with `omp-headroom`: `DarkPhilosophy` author, canonical `git+` repository URL, packaged README/CHANGELOG, the `check`/`format`/`typecheck`/`test`/`scan`/`verify` script convention, the strict shared `tsconfig.json` (ES2023 lib, `verbatimModuleSyntax`), and the full shared Biome configuration (VCS-aware, 100-column, double quotes).
+- Standardized project metadata and tooling: `DarkPhilosophy` author, canonical `git+` repository URL, packaged README/CHANGELOG, the `check`/`format`/`typecheck`/`test`/`scan`/`verify` script convention, a strict `tsconfig.json` (ES2023 lib, `verbatimModuleSyntax`), and a full Biome configuration (VCS-aware, 100-column, double quotes).
 
 ## 0.1.0 — 2026-07-23
 
