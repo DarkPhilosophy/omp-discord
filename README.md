@@ -32,6 +32,17 @@ omp plugin install omp-discord
 
 npm installs do not update themselves — rerun `omp plugin install omp-discord` to pick up a newer release.
 
+### Marketplace install
+
+Managed updates are available through the [darkphilosophy marketplace](https://github.com/DarkPhilosophy/omp-marketplace):
+
+```bash
+omp plugin marketplace add DarkPhilosophy/omp-marketplace
+omp plugin install omp-discord@darkphilosophy
+```
+
+Upgrade explicitly with `omp plugin upgrade`, or set the `marketplace.autoUpdate` setting to `auto` to upgrade marketplace plugins automatically at OMP startup.
+
 ### Checkout / development
 
 ```bash
@@ -135,7 +146,7 @@ tests/                 Behavioral suites for every module
 
 ```bash
 bun install
-bun run check     # lint + typecheck + tests + leak scan
+bun run verify    # Biome check + typecheck + tests + leak scan
 bun run format    # Biome format
 ```
 
