@@ -41,14 +41,56 @@ describe("DiscordClient", () => {
       },
     });
 
-    await client.editMessage("channel-1", "message-1", "updated");
+    await client.editMessage("channel-1", "message-1", {
+      content: "updated",
+      embeds: [{ title: "Status" }],
+    });
     await client.deleteMessage("channel-1", "message-1");
 
     expect(calls.map((call) => [call.url, call.init.method])).toEqual([
       ["https://discord.com/api/v10/channels/channel-1/messages/message-1", "PATCH"],
       ["https://discord.com/api/v10/channels/channel-1/messages/message-1", "DELETE"],
     ]);
-    expect(calls[0]?.init.body).toBe(JSON.stringify({ content: "updated" }));
+    expect(calls[0]?.init.body).toBe(
+      JSON.stringify({ content: "updated", embeds: [{ title: "Status" }] }),
+    );
+  });
+
+  test("sends embeds as JSON and uploads as Discord multipart messages", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const client = new DiscordClient({
+      credential: { get: async () => "session-secret" },
+      fetch: async (url, init) => {
+        calls.push({ url: String(url), init: init ?? {} });
+        return Response.json({ id: "message-1" });
+      },
+    });
+
+    await client.sendMessage("channel-1", {
+      embeds: [{ title: "Status", description: "Everything is operational." }],
+    });
+    await client.sendMessage("channel-1", {
+      content: "See attachment",
+      attachments: [
+        {
+          file: new Blob(["payload"], { type: "text/plain" }),
+          filename: "status.txt",
+          description: "Status details",
+        },
+      ],
+    });
+
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
+      embeds: [{ title: "Status", description: "Everything is operational." }],
+    });
+    expect(calls[1]?.init.body).toBeInstanceOf(FormData);
+    const form = calls[1]?.init.body as FormData;
+    expect(JSON.parse(String(form.get("payload_json")))).toEqual({
+      content: "See attachment",
+      attachments: [{ id: "0", filename: "status.txt", description: "Status details" }],
+    });
+    expect(form.get("files[0]")).toBeInstanceOf(Blob);
+    expect(calls[1]?.init.headers).not.toHaveProperty("content-type");
   });
 
   test("gets the authenticated user without exposing the credential", async () => {

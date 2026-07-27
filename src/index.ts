@@ -1,5 +1,6 @@
+import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 import { AsyncJobManager } from "@oh-my-pi/pi-coding-agent/async";
 import { MAIN_AGENT_ID } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
@@ -14,7 +15,10 @@ import { SecretToolCredentialStore } from "./credential-store.ts";
 import {
   type DiscordAttachmentMetadata,
   DiscordClient,
+  type DiscordEmbed,
   DiscordHttpError,
+  type DiscordMessagePayload,
+  type DiscordUploadAttachment,
 } from "./discord-client.ts";
 import { FollowManager, type FollowMessage, type FollowStatus } from "./follow-manager.ts";
 import {
@@ -80,6 +84,55 @@ type TargetInput = {
   recipientId?: string;
   recipientIds?: string[];
 };
+
+type UploadAttachmentInput = {
+  path: string;
+  filename?: string;
+  description?: string;
+};
+
+type MessageInput = {
+  content?: string;
+  embeds?: DiscordEmbed[];
+  attachments?: UploadAttachmentInput[];
+};
+
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+function embedCharacterCount(embed: DiscordEmbed): number {
+  return (
+    (embed.title?.length ?? 0) +
+    (embed.description?.length ?? 0) +
+    (embed.footer?.text.length ?? 0) +
+    (embed.author?.name.length ?? 0) +
+    (embed.fields?.reduce((total, field) => total + field.name.length + field.value.length, 0) ?? 0)
+  );
+}
+
+async function loadUploadAttachment(
+  input: UploadAttachmentInput,
+): Promise<DiscordUploadAttachment> {
+  let metadata: { isFile(): boolean; size: number };
+  try {
+    metadata = await stat(input.path);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Unable to read Discord attachment "${input.path}": ${reason}`);
+  }
+  if (!metadata.isFile()) {
+    throw new Error(`Discord attachment "${input.path}" is not a regular file`);
+  }
+  if (metadata.size > MAX_UPLOAD_BYTES) {
+    throw new Error(
+      `Discord attachment "${input.path}" is ${metadata.size} bytes; maximum is ${MAX_UPLOAD_BYTES} bytes`,
+    );
+  }
+  return {
+    file: Bun.file(input.path),
+    filename: input.filename ?? basename(input.path),
+    ...(input.description ? { description: input.description } : {}),
+  };
+}
 
 const CACHE_ROOT = join(homedir(), ".omp", "discord");
 
@@ -718,6 +771,85 @@ export function createDiscordExtension(
     recipientId: z.string().min(1).optional(),
     recipientIds: z.array(z.string().min(1)).min(1).optional(),
   });
+  const embedSchema = z.object({
+    title: z.string().max(256).optional(),
+    description: z.string().max(4_096).optional(),
+    url: z.string().url().optional(),
+    timestamp: z.string().datetime({ offset: true }).optional(),
+    color: z.number().int().min(0).max(0xff_ff_ff).optional(),
+    footer: z
+      .object({
+        text: z.string().min(1).max(2_048),
+        icon_url: z.string().url().optional(),
+      })
+      .optional(),
+    image: z.object({ url: z.string().url() }).optional(),
+    thumbnail: z.object({ url: z.string().url() }).optional(),
+    author: z
+      .object({
+        name: z.string().min(1).max(256),
+        url: z.string().url().optional(),
+        icon_url: z.string().url().optional(),
+      })
+      .optional(),
+    fields: z
+      .array(
+        z.object({
+          name: z.string().min(1).max(256),
+          value: z.string().min(1).max(1_024),
+          inline: z.boolean().optional(),
+        }),
+      )
+      .max(25)
+      .optional(),
+  });
+  const embedsSchema = z
+    .array(embedSchema)
+    .min(1)
+    .max(10)
+    .superRefine((embeds, ctx) => {
+      const characters = embeds.reduce((total, embed) => total + embedCharacterCount(embed), 0);
+      if (characters > 6_000) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Discord embeds contain ${characters} characters; maximum is 6000`,
+        });
+      }
+    });
+  const uploadAttachmentSchema = z.object({
+    path: z.string().min(1),
+    filename: z.string().min(1).max(1_024).optional(),
+    description: z.string().max(1_024).optional(),
+  });
+  const sendMessageSchema = z
+    .object({
+      target: targetSchema,
+      content: z.string().min(1).max(4_000).optional(),
+      embeds: embedsSchema.optional(),
+      attachments: z.array(uploadAttachmentSchema).min(1).max(10).optional(),
+    })
+    .superRefine((message, ctx) => {
+      if (!message.content && !message.embeds && !message.attachments) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Discord message requires content, embeds, or attachments",
+        });
+      }
+    });
+  const editMessageSchema = z
+    .object({
+      messageId: z.string().min(1),
+      content: z.string().min(1).max(4_000).optional(),
+      embeds: embedsSchema.optional(),
+    })
+    .superRefine((message, ctx) => {
+      if (!message.content && !message.embeds) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Discord message edit requires content or embeds",
+        });
+      }
+    });
 
   interface JsonToolResult {
     value: unknown;
@@ -966,19 +1098,25 @@ export function createDiscordExtension(
     },
   });
 
-  registerJsonTool<{ target: TargetInput; content: string }>({
+  registerJsonTool<MessageInput & { target: TargetInput }>({
     name: "discord_send_message",
     label: "Discord Send Message",
-    description: "Send the supplied message to one explicit guild channel, DM, or group DM.",
-    parameters: z.object({
-      target: targetSchema,
-      content: z.string().min(1).max(2_000),
-    }),
+    description:
+      "Send content, embeds, and local file attachments to one explicit guild channel, DM, or group DM.",
+    parameters: sendMessageSchema,
     async execute(params, ctx) {
       const sessionId = currentSessionId(ctx);
       const target = targetFrom(params.target);
+      const attachments = params.attachments
+        ? await Promise.all(params.attachments.map(loadUploadAttachment))
+        : undefined;
       await assertTargetAvailable(target);
-      const message = safeMessage(await client.sendMessage(target.channelId, params.content));
+      const payload: DiscordMessagePayload = {
+        ...(params.content ? { content: params.content } : {}),
+        ...(params.embeds ? { embeds: params.embeds } : {}),
+        ...(attachments ? { attachments } : {}),
+      };
+      const message = safeMessage(await client.sendMessage(target.channelId, payload));
       if (!message || typeof message.messageId !== "string")
         throw new Error("Discord did not return a message identifier");
       await cacheListedMessages(cacheRoot, sessionId, [
@@ -1041,18 +1179,13 @@ export function createDiscordExtension(
   });
 
   for (const operation of ["edit", "delete"] as const) {
-    registerJsonTool<{ messageId: string; content?: string }>({
+    registerJsonTool<{ messageId: string; content?: string; embeds?: DiscordEmbed[] }>({
       name: operation === "edit" ? "discord_edit_message" : "discord_delete_message",
       label: operation === "edit" ? "Discord Edit Message" : "Discord Delete Message",
       description:
         "Edit or delete a message only after it appeared in this OMP session's cached message list.",
       parameters:
-        operation === "edit"
-          ? z.object({
-              messageId: z.string().min(1),
-              content: z.string().min(1).max(2_000),
-            })
-          : z.object({ messageId: z.string().min(1) }),
+        operation === "edit" ? editMessageSchema : z.object({ messageId: z.string().min(1) }),
       async execute(params, ctx) {
         const sessionId = currentSessionId(ctx);
         const message = (await listCachedMessages(cacheRoot, sessionId)).find(
@@ -1066,13 +1199,15 @@ export function createDiscordExtension(
           );
         const occurredAt = new Date().toISOString();
         if (operation === "edit") {
-          const content = params.content;
-          if (!content) throw new Error("Discord message content is required");
+          const payload = {
+            ...(params.content ? { content: params.content } : {}),
+            ...(params.embeds ? { embeds: params.embeds } : {}),
+          };
           const updated = safeMessage(
-            await client.editMessage(message.target.channelId, message.messageId, content),
+            await client.editMessage(message.target.channelId, message.messageId, payload),
           );
           await updateCachedMessage(cacheRoot, sessionId, message.messageId, {
-            content,
+            ...(params.content ? { content: params.content } : {}),
             updatedAt: occurredAt,
             editedAt: updated?.editedAt ?? occurredAt,
           });

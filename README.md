@@ -84,6 +84,10 @@ Type `/discord ` in OMP to open argument completion.
 
 Edit and delete operate **only** on messages this OMP session sent (tracked in the session's cached message list) — the agent cannot touch foreign messages.
 
+`discord_send_message` accepts text, embeds, local file attachments, or any combination of them.
+Each attachment may override its filename and add a Discord description; uploads must be regular
+files no larger than 10 MiB. `discord_edit_message` can update text and embeds, but not attachments.
+
 ## Follow architecture
 
 1. `discord_follow_start` validates the target, persists it, and arms a poll loop (`follow.poll_ms`, jittered).

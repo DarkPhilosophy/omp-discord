@@ -1,6 +1,6 @@
 {
   "name": "omp-discord",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Explicit, local Discord account operations for Oh My Pi.",
   "author": "DarkPhilosophy",
   "license": "GPL-3.0-or-later",

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Rich outbound Discord messages: `discord_send_message` supports embeds and local file uploads, while `discord_edit_message` supports content and embed updates.
+- Native multipart attachment uploads with explicit filenames/descriptions, regular-file validation, and a 10 MiB per-file limit.
+
 ### Removed
 
 - The `darkphilosophy-discord` marketplace catalog. `omp-discord` is distributed through the single `darkphilosophy` catalog.

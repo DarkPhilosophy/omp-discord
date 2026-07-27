@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { zodToWireSchema } from "@oh-my-pi/pi-ai/utils/schema";
@@ -132,6 +132,40 @@ describe("Discord extension", () => {
 
     expect(schema.required).toBeUndefined();
     expect(Object.keys(schema.properties ?? {}).sort()).toEqual(["limit", "scope", "target"]);
+  });
+
+  test("enforces Discord message and embed limits in the published tool schemas", () => {
+    const tools = new Map<string, RegisteredTool>();
+    createDiscordExtension(extensionApi(tools), {
+      client: {} as DiscordClient,
+    });
+
+    const send = tools.get("discord_send_message")?.parameters as
+      | { safeParse: (input: unknown) => { success: boolean } }
+      | undefined;
+    const edit = tools.get("discord_edit_message")?.parameters as
+      | { safeParse: (input: unknown) => { success: boolean } }
+      | undefined;
+    if (!send || !edit) throw new Error("Discord message tools are missing parameters");
+
+    const target = { kind: "dm", channelId: "channel-1", recipientId: "user-1" };
+    expect(send.safeParse({ target, content: "x".repeat(2_001) }).success).toBe(true);
+    expect(send.safeParse({ target, content: "x".repeat(4_001) }).success).toBe(false);
+    expect(
+      send.safeParse({
+        target,
+        embeds: [{ description: "x".repeat(4_000) }, { description: "x".repeat(2_001) }],
+      }).success,
+    ).toBe(false);
+    expect(
+      send.safeParse({
+        target,
+        embeds: [{ title: "x".repeat(257) }],
+      }).success,
+    ).toBe(false);
+    expect(edit.safeParse({ messageId: "message-1", content: "x".repeat(4_001) }).success).toBe(
+      false,
+    );
   });
   test("lists safe attachment metadata and returns image content without exposing CDN URLs", async () => {
     const tools = new Map<string, RegisteredTool>();
@@ -377,9 +411,9 @@ describe("Discord extension", () => {
       deleteMessage: async (channelId: string, messageId: string) => {
         calls.push({ action: "delete", channelId, messageId });
       },
-      editMessage: async (channelId: string, messageId: string, content: string) => {
-        calls.push({ action: "edit", channelId, content, messageId });
-        return { content, id: messageId };
+      editMessage: async (channelId: string, messageId: string, message: { content?: string }) => {
+        calls.push({ action: "edit", channelId, content: message.content, messageId });
+        return { content: message.content, id: messageId };
       },
       listDirectChannels: async () => [{ id: "dm-1", recipients: [{ id: "user-1" }], type: 1 }],
       sendMessage: async () => ({
@@ -486,6 +520,89 @@ describe("Discord extension", () => {
     ).rejects.toThrow("does not belong to the selected guild");
 
     expect(sent).toBe(false);
+  });
+
+  test("passes rich message fields and selected uploads through to the Discord client", async () => {
+    const cacheRoot = await mkdtemp(join(tmpdir(), "omp-discord-index-"));
+    roots.push(cacheRoot);
+    const attachmentPath = join(cacheRoot, "diagram.txt");
+    await writeFile(attachmentPath, "diagram");
+    const tools = new Map<string, { execute: (...args: never[]) => Promise<unknown> }>();
+    const sent: unknown[] = [];
+    const client = {
+      listDirectChannels: async () => [{ id: "dm-1", recipients: [{ id: "user-1" }] }],
+      sendMessage: async (_channelId: string, payload: unknown) => {
+        sent.push(payload);
+        return {
+          id: "message-1",
+          channel_id: "dm-1",
+          content: "",
+          timestamp: "2026-07-19T12:00:00.000Z",
+        };
+      },
+    } as unknown as DiscordClient;
+    createDiscordExtension(extensionApi(tools), { cacheRoot, client });
+
+    await execute(
+      tools,
+      "discord_send_message",
+      {
+        target: { kind: "dm", channelId: "dm-1", recipientId: "user-1" },
+        embeds: [{ title: "Status", description: "Everything is operational." }],
+        attachments: [{ path: attachmentPath, description: "Status details" }],
+      },
+      "session-a",
+    );
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      embeds: [{ title: "Status", description: "Everything is operational." }],
+      attachments: [
+        {
+          filename: "diagram.txt",
+          description: "Status details",
+        },
+      ],
+    });
+    expect((sent[0] as { attachments: Array<{ file: Blob }> }).attachments[0]?.file).toBeInstanceOf(
+      Blob,
+    );
+  });
+
+  test("rejects missing and oversized uploads before sending a Discord request", async () => {
+    const cacheRoot = await mkdtemp(join(tmpdir(), "omp-discord-index-"));
+    roots.push(cacheRoot);
+    const oversizedPath = join(cacheRoot, "oversized.bin");
+    await writeFile(oversizedPath, "");
+    await truncate(oversizedPath, 10 * 1024 * 1024 + 1);
+    const tools = new Map<string, { execute: (...args: never[]) => Promise<unknown> }>();
+    const sent: unknown[] = [];
+    const client = {
+      sendMessage: async (...args: unknown[]) => {
+        sent.push(args);
+        return {};
+      },
+    } as unknown as DiscordClient;
+    createDiscordExtension(extensionApi(tools), { cacheRoot, client });
+    const target = { kind: "dm", channelId: "dm-1", recipientId: "user-1" };
+
+    await expect(
+      execute(
+        tools,
+        "discord_send_message",
+        { target, attachments: [{ path: join(cacheRoot, "missing.txt") }] },
+        "session-a",
+      ),
+    ).rejects.toThrow("Unable to read Discord attachment");
+    await expect(
+      execute(
+        tools,
+        "discord_send_message",
+        { target, attachments: [{ path: oversizedPath }] },
+        "session-a",
+      ),
+    ).rejects.toThrow("maximum is 10485760 bytes");
+    expect(sent).toHaveLength(0);
   });
 
   test("separates live channel reads from this session's sent-message archive", async () => {

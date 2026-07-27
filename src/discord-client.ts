@@ -26,6 +26,36 @@ export interface DiscordAttachmentRead {
   data: Uint8Array;
 }
 
+export interface DiscordEmbed {
+  title?: string;
+  description?: string;
+  url?: string;
+  timestamp?: string;
+  color?: number;
+  footer?: { text: string; icon_url?: string };
+  image?: { url: string };
+  thumbnail?: { url: string };
+  author?: { name: string; url?: string; icon_url?: string };
+  fields?: Array<{ name: string; value: string; inline?: boolean }>;
+}
+
+export interface DiscordUploadAttachment {
+  file: Blob;
+  filename: string;
+  description?: string;
+}
+
+export interface DiscordMessagePayload {
+  content?: string;
+  embeds?: DiscordEmbed[];
+  attachments?: DiscordUploadAttachment[];
+}
+
+export interface DiscordMessageEdit {
+  content?: string;
+  embeds?: DiscordEmbed[];
+}
+
 export interface DiscordAttachmentLimits {
   imageMaxBytes: number;
   textMaxBytes: number;
@@ -198,19 +228,40 @@ export class DiscordClient {
     >;
   }
 
-  async sendMessage(channelId: string, content: string): Promise<unknown> {
+  async sendMessage(channelId: string, payload: DiscordMessagePayload): Promise<unknown> {
+    const attachments = payload.attachments;
+    let body: BodyInit;
+    if (attachments?.length) {
+      const form = new FormData();
+      const metadata = attachments.map(({ filename, description }, index) => ({
+        id: String(index),
+        filename,
+        ...(description ? { description } : {}),
+      }));
+      form.set("payload_json", JSON.stringify({ ...payload, attachments: metadata }));
+      for (const [index, attachment] of attachments.entries()) {
+        form.set(`files[${index}]`, attachment.file, attachment.filename);
+      }
+      body = form;
+    } else {
+      body = JSON.stringify(payload);
+    }
     return this.#request(`/channels/${encodeURIComponent(channelId)}/messages`, {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body,
     });
   }
 
-  async editMessage(channelId: string, messageId: string, content: string): Promise<unknown> {
+  async editMessage(
+    channelId: string,
+    messageId: string,
+    message: DiscordMessageEdit,
+  ): Promise<unknown> {
     return this.#request(
       `/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`,
       {
         method: "PATCH",
-        body: JSON.stringify({ content }),
+        body: JSON.stringify(message),
       },
     );
   }
@@ -291,7 +342,9 @@ export class DiscordClient {
       ...init,
       headers: {
         authorization: token,
-        ...(init.body ? { "content-type": "application/json" } : {}),
+        ...(init.body && !(init.body instanceof FormData)
+          ? { "content-type": "application/json" }
+          : {}),
         ...init.headers,
       },
     });
