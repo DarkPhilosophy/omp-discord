@@ -775,7 +775,7 @@ export function createDiscordExtension(
     title: z.string().max(256).optional(),
     description: z.string().max(4_096).optional(),
     url: z.string().url().optional(),
-    timestamp: z.string().datetime({ offset: true }).optional(),
+    timestamp: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/).optional(),
     color: z.number().int().min(0).max(0xff_ff_ff).optional(),
     footer: z
       .object({
@@ -803,53 +803,88 @@ export function createDiscordExtension(
       .max(25)
       .optional(),
   });
-  const embedsSchema = z
-    .array(embedSchema)
-    .min(1)
-    .max(10)
-    .superRefine((embeds, ctx) => {
-      const characters = embeds.reduce((total, embed) => total + embedCharacterCount(embed), 0);
-      if (characters > 6_000) {
-        ctx.addIssue({
-          code: "custom",
-          message: `Discord embeds contain ${characters} characters; maximum is 6000`,
-        });
-      }
-    });
+  // Some OMP hosts expose a reduced Zod-compatible API without `superRefine`
+  // but still provide `refine`; retain schema-level validation on both hosts.
+  const addSchemaRefinement = <T>(
+    schema: T,
+    predicate: (value: unknown) => boolean,
+    message: string,
+  ): T => {
+    const candidate = schema as T & {
+      superRefine?: (check: (value: unknown, ctx: { addIssue: (issue: unknown) => void }) => void) => T;
+      refine?: (check: (value: unknown) => boolean, options?: { message: string }) => T;
+    };
+    if (typeof candidate.superRefine === "function") {
+      return candidate.superRefine((value, ctx) => {
+        if (!predicate(value)) ctx.addIssue({ code: "custom", message });
+      });
+    }
+    if (typeof candidate.refine === "function") {
+      return candidate.refine(predicate, { message });
+    }
+    return schema;
+  };
+  const embedsSchema = addSchemaRefinement(
+    z.array(embedSchema).min(1).max(10),
+    (value) =>
+      Array.isArray(value) &&
+      value.reduce(
+        (total, embed) => total + embedCharacterCount(embed as DiscordEmbed),
+        0,
+      ) <= 6_000,
+    "Discord embeds contain more than 6000 characters",
+  );
   const uploadAttachmentSchema = z.object({
     path: z.string().min(1),
     filename: z.string().min(1).max(1_024).optional(),
     description: z.string().max(1_024).optional(),
   });
-  const sendMessageSchema = z
-    .object({
+  const sendMessageSchema = addSchemaRefinement(
+    z.object({
       target: targetSchema,
       content: z.string().min(1).max(4_000).optional(),
       embeds: embedsSchema.optional(),
       attachments: z.array(uploadAttachmentSchema).min(1).max(10).optional(),
-    })
-    .superRefine((message, ctx) => {
-      if (!message.content && !message.embeds && !message.attachments) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Discord message requires content, embeds, or attachments",
-        });
-      }
-    });
-  const editMessageSchema = z
-    .object({
+    }),
+    (value) => {
+      if (!value || typeof value !== "object") return false;
+      const message = value as MessageInput & { attachments?: UploadAttachmentInput[] };
+      return Boolean(message.content || message.embeds || message.attachments);
+    },
+    "Discord message requires content, embeds, or attachments",
+  );
+  const editMessageSchema = addSchemaRefinement(
+    z.object({
       messageId: z.string().min(1),
       content: z.string().min(1).max(4_000).optional(),
       embeds: embedsSchema.optional(),
-    })
-    .superRefine((message, ctx) => {
-      if (!message.content && !message.embeds) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Discord message edit requires content or embeds",
-        });
-      }
-    });
+    }),
+    (value) => {
+      if (!value || typeof value !== "object") return false;
+      const message = value as MessageInput;
+      return Boolean(message.content || message.embeds);
+    },
+    "Discord message edit requires content or embeds",
+  );
+  const validateEmbeds = (embeds: readonly DiscordEmbed[] | undefined): void => {
+    if (embeds === undefined) return;
+    const characters = embeds.reduce((total, embed) => total + embedCharacterCount(embed), 0);
+    if (characters > 6_000) {
+      throw new Error(`Discord embeds contain ${characters} characters; maximum is 6000`);
+    }
+  };
+  const validateSendMessage = (message: MessageInput): void => {
+    validateEmbeds(message.embeds);
+    if (!message.content && !message.embeds && !message.attachments) {
+      throw new Error("Discord message requires content, embeds, or attachments");
+    }
+  };
+  const validateEditMessage = (message: MessageInput): void => {
+    validateEmbeds(message.embeds);
+    if (!message.content && !message.embeds) {
+      throw new Error("Discord message edit requires content or embeds");
+    }
+  };
 
   interface JsonToolResult {
     value: unknown;
@@ -1107,6 +1142,7 @@ export function createDiscordExtension(
     async execute(params, ctx) {
       const sessionId = currentSessionId(ctx);
       const target = targetFrom(params.target);
+      validateSendMessage(params);
       const attachments = params.attachments
         ? await Promise.all(params.attachments.map(loadUploadAttachment))
         : undefined;
@@ -1199,6 +1235,7 @@ export function createDiscordExtension(
           );
         const occurredAt = new Date().toISOString();
         if (operation === "edit") {
+          validateEditMessage(params);
           const payload = {
             ...(params.content ? { content: params.content } : {}),
             ...(params.embeds ? { embeds: params.embeds } : {}),
